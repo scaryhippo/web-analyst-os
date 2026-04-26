@@ -40,8 +40,13 @@ class AnalystState(TypedDict):
     executive_summary: str
     final_report: str
 
+    # サブページクローリング（--crawl-subpages 時のみ）
+    subpages: List[Dict]
+
     # メタ
     current_phase: str
     error: Optional[str]
     run_red_team: bool                # False の場合は Phase 2 をスキップ
     site_type: str                    # transactional / brand / portfolio / consulting
+    crawl_subpages: bool
+    crawl_max: int

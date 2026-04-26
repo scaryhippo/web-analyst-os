@@ -2,7 +2,7 @@
 UX Auditor — タスク完了率の専門エージェント
 """
 from core.llm_router import call_llm
-from agents._base import parse_agent_json, safe_score, build_page_context, get_site_type_context
+from agents._base import parse_agent_json, safe_score, build_page_context, get_site_type_context, build_subpages_context
 
 SYSTEM_PROMPT = """あなたは「UX Auditor」です。タスク完了率の専門家として、
 ユーザーが摩擦なく目的を達成できるかを判定します。
@@ -14,6 +14,13 @@ SYSTEM_PROMPT = """あなたは「UX Auditor」です。タスク完了率の専
 - モバイルでの操作性（タップターゲットサイズ・スクロール操作）
 - エラーメッセージ・空状態・ローディング表示の適切さ
 - アクセシビリティ（コントラスト比・フォーカス表示・スクリーンリーダー対応）
+
+
+【スコアリング独立性の確保】
+- スコアは5の倍数ではなく、実際の評価に基づいた値（例: 67, 73, 81）を使用すること。
+- 他のエージェントのスコアを参照・調整しないこと（専門家として独立して評価する）。
+- 70〜79の範囲に集中することを避け、サイトの実態に基づき0〜100の全範囲を積極的に活用すること。
+- 評価の根拠を1〜2文で示した上でスコアを確定すること。
 
 必ず以下の JSON 形式のみで回答してください:
 {
@@ -28,9 +35,10 @@ SYSTEM_PROMPT = """あなたは「UX Auditor」です。タスク完了率の専
 
 def ux_auditor_node(state: dict) -> dict:
     page_context = build_page_context(state)
+    subpages_context = build_subpages_context(state)
     user_prompt = f"""以下のWebサイトの UX・使いやすさを分析してください。
 
-{page_context}
+{page_context}{subpages_context}
 
 JSON のみで回答してください。"""
 

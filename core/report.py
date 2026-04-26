@@ -21,6 +21,15 @@ def clean_executive_summary(text: str) -> str:
     return "\n".join(lines).strip()
 
 
+def clean_arrow_formatting(text: str) -> str:
+    """'→ →' '→→' などの二重矢印を単一の '→' に正規化する"""
+    return re.sub(r'→\s*→', '→', text)
+
+
+def clean_items(items: list) -> list:
+    return [clean_arrow_formatting(item) for item in items]
+
+
 # ─── Fix 3: P2 品質フィルタ ───────────────────────────────────────────────────
 
 def filter_p2_quality(p2_items: list) -> list:
@@ -37,62 +46,103 @@ def filter_p2_quality(p2_items: list) -> list:
     return filtered
 
 
-# ─── Fix 4: クロスエージェント重複除去 ──────────────────────────────────────
+# ─── Fix A: 重複除去（トピックグループベース、P1/P2/P3 統合処理） ─────────────
 
-DEDUP_KEYWORDS = [
-    ["CTA", "コンバージョン", "問い合わせ導線", "CTAが"],
-    ["社会的証明", "トラスト", "信頼", "実績", "クライアント名"],
-    ["価格", "料金", "価格帯", "費用"],
-    ["ナビゲーション", "ナビ", "グローバルナビ"],
-    ["モバイル", "タップ", "スマートフォン"],
-    ["パンくず", "breadcrumb"],
-    ["フォーカス", "キーボードナビ", "focus-visible"],
-    ["meta description", "メタディスクリプション"],
-    ["構造化データ", "JSON-LD", "OGP"],
+DEDUP_TOPIC_GROUPS = [
+    # 画像・ページサイズ最適化
+    ["WebP", "遅延読み込み", "Lazy", "lazy", "ページサイズ", "KB", "画像最適化", "300KB"],
+    # 社会的証明・トラストシグナル
+    ["社会的証明", "トラスト", "実績数", "クライアント名", "導入施設", "受賞歴", "ロゴ"],
+    # CTA・コンバージョン導線
+    ["CTA", "主CTA", "コンバージョン導線", "問い合わせ.*導線", "READ THE MANIFESTO"],
+    # 経歴・プロフィール検証
+    ["経歴", "LinkedI", "在籍期間", "MBB.*ファーム", "CIO.*在任", "プロフィール"],
+    # なりすましメール・警告バナー
+    ["なりすまし", "警告バナー", "警告.*配置", "フィッシング"],
+    # WORKSページ・ポートフォリオ不在
+    ["WORKSページ", "ポートフォリオ.*確認", "作品.*不在", "作品.*見え", "ビジュアル.*不在"],
+    # ナビゲーション・メニュー
+    ["グローバルナビ", "ナビゲーション.*ラベル", "ナビ.*英語", "ナビ.*日本語"],
+    # 価格・料金
+    ["価格", "料金", "価格帯", "費用", "有償"],
+    # フォーム・送信体験
+    ["フォーム.*バリデーション", "送信.*フィードバック", "返信.*日数", "エラーメッセージ"],
+    # 構造化データ・SEO
+    ["構造化データ", "JSON-LD", "OGP", "Twitter Card", "meta description"],
+    # パンくず・現在地
+    ["パンくず", "breadcrumb", "現在地"],
+    # タップターゲット・モバイル操作性
+    ["タップターゲット", "44×44", "48×48", "モバイル.*タップ"],
+    # フォーカス・アクセシビリティ
+    ["focus-visible", "フォーカス表示", "キーボードナビ", "スクリーンリーダー", "WCAG"],
+    # ターゲット分離
+    ["BtoB.*BtoC", "施設担当者.*求職者", "ターゲット.*分離", "ターゲット.*分岐"],
+    # H1・ヒーローコピーの明確性
+    ["H1.*コピー", "ヒーロー.*5秒", "ファーストビュー.*伝わらない", "5秒以内.*伝わら"],
 ]
 
 
-def dedup_recommendations(items: list) -> list:
+def _match_topic_group(item_lower: str) -> int | None:
+    """アイテムがどのトピックグループに属するかを返す（属さない場合は None）"""
+    for group_idx, keywords in enumerate(DEDUP_TOPIC_GROUPS):
+        for kw in keywords:
+            try:
+                if re.search(kw.lower(), item_lower):
+                    return group_idx
+            except re.error:
+                if kw.lower() in item_lower:
+                    return group_idx
+    return None
+
+
+def build_prioritized_items(p1_raw: list, p2_raw: list, p3_raw: list) -> tuple:
     """
-    同一キーワードグループに属するアイテムが複数ある場合、
-    最初（通常最も詳細）のみ残す。
+    P1/P2/P3 を統合した状態でトピックレベル重複除去し、再分離する。
+    P1 に出現したトピックは P2/P3 から除去される。
     """
+    tagged = (
+        [("P1", item) for item in p1_raw] +
+        [("P2", item) for item in p2_raw] +
+        [("P3", item) for item in p3_raw]
+    )
     seen_groups: set = set()
-    result = []
-    for item in items:
-        item_lower = item.lower()
-        matched_group = None
-        for i, keywords in enumerate(DEDUP_KEYWORDS):
-            if sum(1 for kw in keywords if kw.lower() in item_lower) >= 2:
-                matched_group = i
-                break
-        if matched_group is None or matched_group not in seen_groups:
-            result.append(item)
-            if matched_group is not None:
-                seen_groups.add(matched_group)
-    return result
+    result_tagged = []
+
+    for priority, item in tagged:
+        group_idx = _match_topic_group(item.lower())
+        if group_idx is None or group_idx not in seen_groups:
+            result_tagged.append((priority, item))
+            if group_idx is not None:
+                seen_groups.add(group_idx)
+
+    p1_out = [item for p, item in result_tagged if p == "P1"]
+    p2_out = [item for p, item in result_tagged if p == "P2"]
+    p3_out = [item for p, item in result_tagged if p == "P3"]
+    return p1_out, p2_out, p3_out
 
 
-# ─── Fix 2: P1 上限キャップ（最大5件） ───────────────────────────────────────
+# ─── Fix 2/B: P1/P2 上限キャップ ───────────────────────────────────────────
 
 P1_MAX = 5
+P2_MAX = 10
 
 
 def cap_p1_items(p1_items: list, p2_items: list) -> tuple:
-    """
-    P1 を P1_MAX 件に絞る。超過分はP2先頭に移動する。
-    具体的な改善提案（[agent_name] 形式）を優先してP1に残し、
-    スコア評価のみの行はP2に降格する。
-    """
+    """P1 を P1_MAX 件に絞り、超過分を P2 先頭に移動する"""
     if len(p1_items) <= P1_MAX:
         return p1_items, p2_items
-
-    specific = [item for item in p1_items if not item.strip().startswith("- [スコア") and not item.strip().startswith("[スコア")]
-    score_only = [item for item in p1_items if item.strip().startswith("- [スコア") or item.strip().startswith("[スコア")]
-
+    specific = [i for i in p1_items if not i.strip().lstrip("- ").startswith("[スコア")]
+    score_only = [i for i in p1_items if i.strip().lstrip("- ").startswith("[スコア")]
     p1_final = specific[:P1_MAX]
     overflow = specific[P1_MAX:] + score_only
     return p1_final, overflow + p2_items
+
+
+def cap_p2_items(p2_items: list, p3_items: list) -> tuple:
+    """P2 を P2_MAX 件に絞り、超過分を P3 先頭に移動する"""
+    if len(p2_items) <= P2_MAX:
+        return p2_items, p3_items
+    return p2_items[:P2_MAX], p2_items[P2_MAX:] + p3_items
 
 
 def generate_report(state: dict) -> str:
@@ -112,6 +162,7 @@ def generate_report(state: dict) -> str:
     competitor_data = state.get("competitor_data")
     metrics = state.get("page_load_metrics", {})
     site_type = state.get("site_type", "transactional")
+    subpages = state.get("subpages", [])
 
     score_labels = [
         ("conversion",  "コンバージョン設計"),
@@ -133,6 +184,14 @@ def generate_report(state: dict) -> str:
         f"分析日時: {now}",
         f"対象 URL: {url}",
         f"サイトタイプ: {site_type_labels.get(site_type, site_type)}",
+    ]
+    if subpages:
+        sub_labels = " | ".join(
+            sp.get("nav_label") or sp.get("url", "").split("/")[-2] or sp.get("url", "")
+            for sp in subpages
+        )
+        lines.append(f"収集サブページ: {sub_labels}")
+    lines += [
         "━" * 40,
         "",
         "## スコアカード",
@@ -159,10 +218,19 @@ def generate_report(state: dict) -> str:
         "",
     ]
 
-    # Fix 4: 重複除去 → Fix 2: P1 キャップ → Fix 3: P2 品質フィルタ
-    p1_items = dedup_recommendations(p1_items)
-    p2_items = dedup_recommendations(p2_items)
+    # Fix C: 二重矢印クリーニング
+    p1_items = clean_items(p1_items)
+    p2_items = clean_items(p2_items)
+    p3_items = clean_items(p3_items)
+
+    # Fix A: P1/P2/P3 統合重複除去
+    p1_items, p2_items, p3_items = build_prioritized_items(p1_items, p2_items, p3_items)
+
+    # Fix 2: P1 キャップ → Fix B: P2 キャップ
     p1_items, p2_items = cap_p1_items(p1_items, p2_items)
+    p2_items, p3_items = cap_p2_items(p2_items, p3_items)
+
+    # Fix 3: P2 品質フィルタ（スコア羅列のみ除去）
     p2_items = filter_p2_quality(p2_items)
 
     # P1

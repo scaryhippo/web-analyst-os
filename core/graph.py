@@ -30,8 +30,11 @@ def browser_collection_node(state: AnalystState) -> dict:
     url = state["target_url"]
     task_id = state["task_id"]
 
+    do_crawl = state.get("crawl_subpages", False)
+    crawl_max = state.get("crawl_max", 3)
+
     try:
-        data = collector.collect_sync(url, task_id)
+        data = collector.collect_sync(url, task_id, crawl_subpages=do_crawl, crawl_max=crawl_max)
     except Exception as e:
         return {
             "error": f"ブラウザ収集失敗: {e}",
@@ -43,6 +46,8 @@ def browser_collection_node(state: AnalystState) -> dict:
             "screenshot_path": "",
             "mobile_screenshot_path": "",
             "page_load_metrics": {},
+            "subpages": [],
+            "competitor_data": None,
         }
 
     # 競合 URL がある場合は追加収集
@@ -62,6 +67,7 @@ def browser_collection_node(state: AnalystState) -> dict:
         "screenshot_path": data["screenshot_path"],
         "mobile_screenshot_path": data["mobile_screenshot_path"],
         "page_load_metrics": data["page_load_metrics"],
+        "subpages": data.get("subpages", []),
         "competitor_data": competitor_data,
         "current_phase": "phase0_complete",
         "error": None,

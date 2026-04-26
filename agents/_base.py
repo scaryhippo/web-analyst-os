@@ -65,6 +65,25 @@ def get_site_type_context(state: dict) -> str:
     return SITE_TYPE_CONTEXT.get(site_type, SITE_TYPE_CONTEXT["transactional"])
 
 
+def build_subpages_context(state: dict) -> str:
+    """サブページデータをエージェントに渡すコンテキスト文字列を組み立てる"""
+    subpages = state.get("subpages", [])
+    if not subpages:
+        return ""
+    lines = ["\n=== サブページ収集データ ==="]
+    for sp in subpages:
+        label = sp.get("nav_label") or sp.get("url", "")
+        size_kb = round(sp.get("page_size_bytes", 0) / 1024, 1)
+        lines.append(f"\n--- {label} ({sp.get('url', '')} / {size_kb}KB) ---")
+        lines.append(sp.get("text_content", "")[:2000])
+    lines.append(
+        "\n【サブページ分析指示】"
+        "上記のサブページデータを参照し、分析に反映させること。"
+        "「コンテンツ確認不可」「ページ内容が不明」等の判定はサブページ確認後に行うこと。"
+    )
+    return "\n".join(lines)
+
+
 def build_page_context(state: dict) -> str:
     """エージェントに渡すページコンテキスト文字列を組み立てる"""
     title = state.get("page_title", "")

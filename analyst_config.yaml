@@ -1,5 +1,5 @@
 system_name: "Web Analyst OS"
-system_version: "1.1.0"
+system_version: "1.2.0"
 
 # LLM モデル設定
 models:

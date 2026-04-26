@@ -31,4 +31,18 @@ def calculate_scores(messages: list, config: dict, site_type: str = "transaction
         for k in weights
     ) / total_weight if total_weight > 0 else 50
 
-    return {**scores, "overall": round(overall)}
+    result = {**scores, "overall": round(overall)}
+    validate_score_diversity(scores)
+    return result
+
+
+def validate_score_diversity(scores: dict) -> bool:
+    """全エージェントのスコアが5点以内に収まる場合に警告を出す"""
+    values = [v for v in scores.values() if isinstance(v, (int, float))]
+    if len(values) < 3:
+        return True
+    score_range = max(values) - min(values)
+    if score_range <= 5:
+        print(f"  [Scorer] ⚠ スコア分布が狭い（レンジ: {score_range}点）。エージェント独立性を確認してください。")
+        return False
+    return True

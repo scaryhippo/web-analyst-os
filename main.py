@@ -42,6 +42,8 @@ def build_initial_state(
     task_id: str,
     run_red_team: bool,
     site_type: str = "transactional",
+    crawl_subpages: bool = False,
+    crawl_max: int = 3,
 ) -> dict:
     return {
         "target_url": url,
@@ -50,6 +52,9 @@ def build_initial_state(
         "task_id": task_id,
         "run_red_team": run_red_team,
         "site_type": site_type,
+        "crawl_subpages": crawl_subpages,
+        "crawl_max": crawl_max,
+        "subpages": [],
         # Phase 0（初期化）
         "page_title": "",
         "page_meta_description": "",
@@ -80,7 +85,7 @@ def build_initial_state(
     }
 
 
-def run_analysis(url: str, competitor_url: str = "", focus: str = "all", run_red_team: bool = True, site_type: str = "transactional"):
+def run_analysis(url: str, competitor_url: str = "", focus: str = "all", run_red_team: bool = True, site_type: str = "transactional", crawl_subpages: bool = False, crawl_max: int = 3):
     config = load_config()
     version = config.get("system_version", "1.0.0")
 
@@ -89,7 +94,7 @@ def run_analysis(url: str, competitor_url: str = "", focus: str = "all", run_red
     task_id = str(uuid.uuid4())[:8]
     start_time = time.time()
 
-    initial_state = build_initial_state(url, competitor_url, focus, task_id, run_red_team, site_type)
+    initial_state = build_initial_state(url, competitor_url, focus, task_id, run_red_team, site_type, crawl_subpages, crawl_max)
 
     # グラフ実行（LangGraph はストリーミングせず invoke で実行）
     print_phase_header("[Phase 0] ブラウザでページを収集中...")
@@ -256,6 +261,20 @@ def main():
             "  portfolio:     作品集・実績提示目的"
         ),
     )
+    parser.add_argument(
+        "--crawl-subpages",
+        action="store_true",
+        default=False,
+        dest="crawl_subpages",
+        help="ナビゲーションリンクから最大 --crawl-max 件のサブページを追加収集する",
+    )
+    parser.add_argument(
+        "--crawl-max",
+        type=int,
+        default=3,
+        dest="crawl_max",
+        help="--crawl-subpages 使用時の最大収集サブページ数（デフォルト: 3）",
+    )
     args = parser.parse_args()
 
     run_analysis(
@@ -264,6 +283,8 @@ def main():
         focus=args.focus,
         run_red_team=not args.no_red_team,
         site_type=args.site_type,
+        crawl_subpages=args.crawl_subpages,
+        crawl_max=args.crawl_max,
     )
 
 

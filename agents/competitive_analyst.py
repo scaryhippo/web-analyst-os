@@ -2,7 +2,7 @@
 Competitive Positioning Analyst — 差別化の専門エージェント
 """
 from core.llm_router import call_llm
-from agents._base import parse_agent_json, safe_score, build_page_context, get_site_type_context
+from agents._base import parse_agent_json, safe_score, build_page_context, get_site_type_context, build_subpages_context
 
 SYSTEM_PROMPT = """あなたは「Competitive Positioning Analyst」です。差別化の専門家として、
 競合との文脈の中でこのサイトが何を記憶させるかを判定します。
@@ -13,6 +13,13 @@ SYSTEM_PROMPT = """あなたは「Competitive Positioning Analyst」です。差
 - 独自のフレーミング・造語・ビジュアルアイデンティティの有無
 - 競合 URL が指定されている場合: 差別化ポイントと見劣りする点を比較
 - 競合が指定されていない場合: 同カテゴリの一般的ベストプラクティスとの差分
+
+
+【スコアリング独立性の確保】
+- スコアは5の倍数ではなく、実際の評価に基づいた値（例: 67, 73, 81）を使用すること。
+- 他のエージェントのスコアを参照・調整しないこと（専門家として独立して評価する）。
+- 70〜79の範囲に集中することを避け、サイトの実態に基づき0〜100の全範囲を積極的に活用すること。
+- 評価の根拠を1〜2文で示した上でスコアを確定すること。
 
 必ず以下の JSON 形式のみで回答してください:
 {
@@ -41,10 +48,11 @@ def competitive_analyst_node(state: dict) -> dict:
 {c_text}
 """
 
+    subpages_context = build_subpages_context(state)
     user_prompt = f"""以下のWebサイトの競合ポジショニングを分析してください。
 
 {page_context}
-{competitor_section}
+{competitor_section}{subpages_context}
 
 JSON のみで回答してください。"""
 
