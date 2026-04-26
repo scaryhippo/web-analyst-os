@@ -17,7 +17,7 @@ browser:
   mobile_viewport_height: 844
   timeout_ms: 30000
   screenshot_full_page: true
-  wait_for_load: "networkidle"         # ページ完全ロードまで待機
+  wait_for_load: "load"                # ページ完全ロードまで待機（networkidle はタイムアウトリスクあり）
 
 # 分析設定
 analysis:
