@@ -1,0 +1,48 @@
+system_name: "Web Analyst OS"
+system_version: "1.0.0"
+
+# LLM モデル設定
+models:
+  specialist: "claude-sonnet-4-6"      # 各専門エージェント
+  red_team: "claude-sonnet-4-6"        # Skeptical First-Timer
+  synthesis: "claude-sonnet-4-6"       # Phase 3 統合
+  technical: "gpt-4o"                  # Technical Auditor（コード解析に強い）
+
+# ブラウザ設定
+browser:
+  headless: true
+  viewport_width: 1440
+  viewport_height: 900
+  mobile_viewport_width: 390
+  mobile_viewport_height: 844
+  timeout_ms: 30000
+  screenshot_full_page: true
+  wait_for_load: "networkidle"         # ページ完全ロードまで待機
+
+# 分析設定
+analysis:
+  max_pages_per_run: 5                 # 1回の実行で分析するページ数上限
+  include_mobile_check: true
+  competitor_comparison: false          # --competitor 指定時に true
+
+# スコアカード重み（合計 100 になるよう設定）
+score_weights:
+  conversion: 25
+  ux: 25
+  brand_copy: 20
+  technical: 20
+  competitive: 10
+
+# 出力設定
+output:
+  report_dir: "~/Projects/web-analyst-os/reports"
+  show_agent_preview: true             # 分析中に発言冒頭を表示
+  agent_preview_chars: 120
+  save_screenshots: true
+  screenshot_dir: "~/Projects/web-analyst-os/screenshots"
+
+# 優先度分類閾値
+priority:
+  p1_score_threshold: 40              # スコア 40 未満の項目は P1
+  p2_score_threshold: 65              # 40〜65 は P2
+  # 65 以上は P3
