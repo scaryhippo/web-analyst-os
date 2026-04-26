@@ -41,22 +41,40 @@ class BrowserCollector:
     async def _crawl_subpages(self, browser, page, base_url: str, max_pages: int = 3) -> list:
         """
         ナビゲーションリンクを抽出し、最大 max_pages 件のサブページを収集する。
-        nav/header 内のリンクを優先し、外部ドメイン・画像・PDFを除外する。
+        アンカーリンク・重複パス・汎用ラベル・コンテンツ不足ページを除外する。
         """
+        import re as _re
+
         base_domain = urlparse(base_url).netloc
+        base_path = urlparse(base_url).path.rstrip("/")
+
+        EXCLUDE_PATTERNS = [
+            r"^#",
+            r"javascript:",
+            r"\.(jpg|png|pdf|svg|gif|zip|mp4|webp)$",
+            r"/(wp-admin|admin|login|logout|cart|checkout)",
+            r"[?&](page|p)=\d+",
+            r"#",
+        ]
+        CONTENT_INDICATORS = [
+            "service", "works", "gallery", "portfolio", "about", "contact",
+            "fee", "price", "menu", "product", "news", "blog", "profile",
+            "サービス", "料金", "実績", "会社", "ギャラリー", "作品",
+        ]
+        GENERIC_LABELS = {"menu", "home", "top", "×", "close", "open", "toggle", "back", ""}
 
         nav_links = await page.evaluate("""
             () => {
                 const links = [];
-                document.querySelectorAll('nav a[href], header a[href]').forEach(a => {
-                    if (a.href && !a.href.startsWith('#'))
-                        links.push({href: a.href, text: a.innerText.trim()});
-                });
-                if (links.length < 5) {
-                    document.querySelectorAll('a[href]').forEach(a => {
-                        if (a.href && !a.href.startsWith('#')) {
-                            const exists = links.some(l => l.href === a.href);
-                            if (!exists) links.push({href: a.href, text: a.innerText.trim()});
+                const seen = new Set();
+                const selectors = ['nav a[href]', 'header a[href]', '.menu a[href]', '#menu a[href]'];
+                for (const sel of selectors) {
+                    document.querySelectorAll(sel).forEach(a => {
+                        const href = a.getAttribute('href');
+                        const text = a.innerText.trim();
+                        if (href && text && !seen.has(href)) {
+                            seen.add(href);
+                            links.push({href: a.href, text: text, pathname: a.pathname});
                         }
                     });
                 }
@@ -64,21 +82,51 @@ class BrowserCollector:
             }
         """)
 
-        internal_links = [
-            l for l in nav_links
-            if urlparse(l["href"]).netloc == base_domain
-            and not any(l["href"].endswith(ext) for ext in (".jpg", ".png", ".pdf", ".svg", ".webp"))
-            and l["href"].rstrip("/") != base_url.rstrip("/")
-        ]
+        def is_valid(link: dict) -> bool:
+            href = link.get("href", "")
+            text = link.get("text", "")
+            pathname = link.get("pathname", "").rstrip("/")
+            for pat in EXCLUDE_PATTERNS:
+                if _re.search(pat, href, _re.IGNORECASE):
+                    return False
+            if urlparse(href).netloc != base_domain:
+                return False
+            if pathname == base_path or pathname in ("", "/"):
+                return False
+            if len(text) <= 1:
+                return False
+            if text.lower() in GENERIC_LABELS:
+                return False
+            return True
+
+        def content_score(link: dict) -> int:
+            combined = (link.get("href", "") + link.get("text", "")).lower()
+            return sum(1 for kw in CONTENT_INDICATORS if kw in combined)
+
+        valid_links = [l for l in nav_links if is_valid(l)]
+        valid_links.sort(key=content_score, reverse=True)
+
+        # パス重複除去
+        seen_paths: set = set()
+        unique_links = []
+        for link in valid_links:
+            path = urlparse(link["href"]).path.rstrip("/")
+            if path not in seen_paths:
+                seen_paths.add(path)
+                unique_links.append(link)
 
         subpage_data = []
-        for link in internal_links[:max_pages]:
+        for link in unique_links[:max_pages]:
             try:
                 sub_page = await browser.new_page()
                 await sub_page.goto(link["href"], wait_until="domcontentloaded", timeout=15000)
                 await sub_page.wait_for_timeout(1500)
                 sub_text = await sub_page.inner_text("body")
                 sub_html = await sub_page.content()
+                # コンテンツが極端に少ないページ（200文字未満）は除外
+                if len(sub_text.strip()) < 200:
+                    await sub_page.close()
+                    continue
                 subpage_data.append({
                     "url": link["href"],
                     "nav_label": link["text"],

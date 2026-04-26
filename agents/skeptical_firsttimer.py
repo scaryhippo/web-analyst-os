@@ -36,6 +36,12 @@ Skeptical First-Timer から受けた攻撃に対して、サイトの現状デ�
 「RESOLVED（解決済み）」「PARTIALLY_RESOLVED（部分的に解決）」「UNRESOLVED（未解決）」
 のいずれかを判定し、その根拠を述べてください。
 
+【判定の確定性】
+- 評価・判定は一度だけ出力すること。
+- 「再判定」「訂正」「上記を修正して」などの自己修正プロセスを出力に含めないこと。
+- 迷いがある場合は最初から慎重に判断し、確定した判定のみを出力する。
+- 判定フォーマット: 「判定: RESOLVED / PARTIALLY_RESOLVED / UNRESOLVED のいずれか1つ」
+
 回答形式（200文字以内）:
 判定: RESOLVED|PARTIALLY_RESOLVED|UNRESOLVED
 根拠: （簡潔な説明）"""

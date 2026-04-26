@@ -21,6 +21,28 @@ def clean_executive_summary(text: str) -> str:
     return "\n".join(lines).strip()
 
 
+def clean_skeptical_output(text: str) -> str:
+    """
+    Skeptical First-Timer の出力から自己修正（再判定）の痕跡を除去する。
+    二段階判定が出た場合は最終判定のみに統一する。
+    """
+    judgments = re.findall(r'判定:\s*(RESOLVED|PARTIALLY_RESOLVED|UNRESOLVED)', text)
+    if len(judgments) >= 2:
+        final_judgment = judgments[-1]
+        # 「---」以降の再判定ブロックを削除
+        text = re.sub(r'\n+---\n+\*\*再判定.*', '', text, flags=re.DOTALL)
+        # 最初の判定を最終判定に書き換え
+        text = re.sub(
+            r'判定:\s*(RESOLVED|PARTIALLY_RESOLVED|UNRESOLVED)',
+            f'判定: {final_judgment}',
+            text,
+            count=1,
+        )
+    # 「**再判定: XXX**」という表記そのものを除去
+    text = re.sub(r'\*\*再判定:\s*(RESOLVED|PARTIALLY_RESOLVED|UNRESOLVED)\*\*\n*', '', text)
+    return text.strip()
+
+
 def clean_arrow_formatting(text: str) -> str:
     """'→ →' '→→' などの二重矢印を単一の '→' に正規化する"""
     return re.sub(r'→\s*→', '→', text)
@@ -32,18 +54,22 @@ def clean_items(items: list) -> list:
 
 # ─── Fix 3: P2 品質フィルタ ───────────────────────────────────────────────────
 
-def filter_p2_quality(p2_items: list) -> list:
+def filter_section_quality(items: list) -> list:
     """
-    P2 からスコア羅列のみの項目を除去する。
-    「→」または具体的な改善アクションを含む項目のみ残す。
+    スコアのみの項目（アクション指示「→」を持たない）をフィルタする。
+    P2・P3 の両方に適用する。
     """
     filtered = []
-    for item in p2_items:
+    for item in items:
         if "→" in item:
             filtered.append(item)
         elif re.match(r"- \[(?!スコア)[^\]]+\]", item) and len(item) > 60:
             filtered.append(item)
     return filtered
+
+
+# 後方互換エイリアス
+filter_p2_quality = filter_section_quality
 
 
 # ─── Fix A: 重複除去（トピックグループベース、P1/P2/P3 統合処理） ─────────────
@@ -230,8 +256,9 @@ def generate_report(state: dict) -> str:
     p1_items, p2_items = cap_p1_items(p1_items, p2_items)
     p2_items, p3_items = cap_p2_items(p2_items, p3_items)
 
-    # Fix 3: P2 品質フィルタ（スコア羅列のみ除去）
-    p2_items = filter_p2_quality(p2_items)
+    # Fix 3 / Fix 2(v1.3): P2・P3 品質フィルタ（スコア羅列のみ除去）
+    p2_items = filter_section_quality(p2_items)
+    p3_items = filter_section_quality(p3_items)
 
     # P1
     lines += ["## 🔴 P1 — 今すぐ対処（インパクト大）", ""]
@@ -283,7 +310,7 @@ def generate_report(state: dict) -> str:
             vector = attack_item.get("vector", "")
             label = vector_labels.get(vector, vector)
             attack_text = attack_item.get("attack", "")
-            rebuttal = rebuttal_map.get(vector, "（応答なし）")
+            rebuttal = clean_skeptical_output(rebuttal_map.get(vector, "（応答なし）"))
             lines += [
                 f"### {label}",
                 "",
