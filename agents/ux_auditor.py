@@ -34,7 +34,7 @@ def ux_auditor_node(state: dict) -> dict:
 
 JSON のみで回答してください。"""
 
-    raw = call_llm("specialist", SYSTEM_PROMPT, user_prompt, max_tokens=1500)
+    raw = call_llm("specialist", SYSTEM_PROMPT, user_prompt, max_tokens=2500)
     data = parse_agent_json(raw)
     score = safe_score(data)
 

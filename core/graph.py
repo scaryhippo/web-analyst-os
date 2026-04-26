@@ -175,7 +175,7 @@ def synthesis_node(state: AnalystState) -> dict:
             "synthesis",
             "Web分析の専門家として、以下の分析結果を3行以内に要約してください。数値を含めて簡潔に。",
             f"総合スコア: {overall}/100\n\n各専門家のサマリー:\n{summary_text}",
-            max_tokens=300,
+            max_tokens=500,
         )
     except Exception:
         # LLM が利用できない場合はスコアから自動生成
