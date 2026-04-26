@@ -1,5 +1,5 @@
 system_name: "Web Analyst OS"
-system_version: "1.0.0"
+system_version: "1.1.0"
 
 # LLM モデル設定
 models:
@@ -25,13 +25,59 @@ analysis:
   include_mobile_check: true
   competitor_comparison: false          # --competitor 指定時に true
 
-# スコアカード重み（合計 100 になるよう設定）
+# スコアカード重み（デフォルト: transactional と同一）
 score_weights:
-  conversion: 25
+  conversion: 30
   ux: 25
   brand_copy: 20
-  technical: 20
+  technical: 15
   competitive: 10
+
+# サイトタイプ別プロファイル（--site-type で切り替え）
+site_type_profiles:
+  transactional:
+    score_weights:
+      conversion: 30
+      ux: 25
+      brand_copy: 20
+      technical: 15
+      competitive: 10
+    pricing_disclosure_required: true
+    cta_density_target: high
+    trust_signal_weight: high
+
+  consulting:
+    score_weights:
+      conversion: 20
+      ux: 20
+      brand_copy: 25
+      technical: 15
+      competitive: 20
+    pricing_disclosure_required: false
+    cta_density_target: low
+    trust_signal_weight: very_high
+
+  brand:
+    score_weights:
+      conversion: 15
+      ux: 25
+      brand_copy: 30
+      technical: 15
+      competitive: 15
+    pricing_disclosure_required: false
+    cta_density_target: low
+    trust_signal_weight: medium
+
+  portfolio:
+    score_weights:
+      conversion: 10
+      ux: 20
+      brand_copy: 25
+      technical: 20
+      competitive: 25
+    pricing_disclosure_required: false
+    cta_density_target: low
+    trust_signal_weight: low
 
 # 出力設定
 output:

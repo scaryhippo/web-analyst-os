@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-Web Analyst OS v1.0.0 — CLI エントリーポイント
+Web Analyst OS v1.1.0 — CLI エントリーポイント
 
 使用例:
   python main.py https://scaryhippo.jp
+  python main.py https://scaryhippo.jp --site-type consulting
   python main.py https://scaryhippo.jp --competitor https://competitor.com
   python main.py https://scaryhippo.jp --focus conversion
   python main.py https://scaryhippo.jp --focus ux --no-red-team
@@ -40,6 +41,7 @@ def build_initial_state(
     focus: str,
     task_id: str,
     run_red_team: bool,
+    site_type: str = "transactional",
 ) -> dict:
     return {
         "target_url": url,
@@ -47,6 +49,7 @@ def build_initial_state(
         "focus": focus,
         "task_id": task_id,
         "run_red_team": run_red_team,
+        "site_type": site_type,
         # Phase 0（初期化）
         "page_title": "",
         "page_meta_description": "",
@@ -77,7 +80,7 @@ def build_initial_state(
     }
 
 
-def run_analysis(url: str, competitor_url: str = "", focus: str = "all", run_red_team: bool = True):
+def run_analysis(url: str, competitor_url: str = "", focus: str = "all", run_red_team: bool = True, site_type: str = "transactional"):
     config = load_config()
     version = config.get("system_version", "1.0.0")
 
@@ -86,7 +89,7 @@ def run_analysis(url: str, competitor_url: str = "", focus: str = "all", run_red
     task_id = str(uuid.uuid4())[:8]
     start_time = time.time()
 
-    initial_state = build_initial_state(url, competitor_url, focus, task_id, run_red_team)
+    initial_state = build_initial_state(url, competitor_url, focus, task_id, run_red_team, site_type)
 
     # グラフ実行（LangGraph はストリーミングせず invoke で実行）
     print_phase_header("[Phase 0] ブラウザでページを収集中...")
@@ -216,6 +219,8 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""使用例:
   python main.py https://scaryhippo.jp
+  python main.py https://scaryhippo.jp --site-type consulting
+  python main.py https://atelier-a3.jp  --site-type portfolio
   python main.py https://scaryhippo.jp --competitor https://example.com
   python main.py https://scaryhippo.jp --focus conversion
   python main.py https://scaryhippo.jp --no-red-team
@@ -238,6 +243,19 @@ def main():
         action="store_true",
         help="Skeptical First-Timer（Phase 2）をスキップ",
     )
+    parser.add_argument(
+        "--site-type",
+        choices=["transactional", "brand", "portfolio", "consulting"],
+        default="transactional",
+        dest="site_type",
+        help=(
+            "サイトのビジネスモデルタイプ（デフォルト: transactional）\n"
+            "  transactional: 流入型BtoB/BtoC\n"
+            "  consulting:    高単価・選別型（価格非掲載を減点しない）\n"
+            "  brand:         ブランディング・認知目的\n"
+            "  portfolio:     作品集・実績提示目的"
+        ),
+    )
     args = parser.parse_args()
 
     run_analysis(
@@ -245,6 +263,7 @@ def main():
         competitor_url=args.competitor,
         focus=args.focus,
         run_red_team=not args.no_red_team,
+        site_type=args.site_type,
     )
 
 

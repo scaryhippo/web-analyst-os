@@ -3,7 +3,7 @@ Technical & Performance Auditor — 技術的障壁の専門エージェント
 HTML・メトリクスから判定（Lighthouse 不要）
 """
 from core.llm_router import call_llm
-from agents._base import parse_agent_json, safe_score
+from agents._base import parse_agent_json, safe_score, get_site_type_context
 
 SYSTEM_PROMPT = """あなたは「Technical & Performance Auditor」です。技術的障壁の専門家として、
 技術的問題がエンゲージメントと発見可能性を阻害していないかを判定します。
@@ -18,6 +18,16 @@ HTML ソースと収集済みパフォーマンスメトリクスから以下を
 - リンク切れの疑いがある箇所（href="#" や javascript:void の多用）
 
 注意: Lighthouse は直接実行せず、提供されたHTMLとメトリクスから判断してください。
+
+【出力品質制約】
+- 推奨事項は必ず当該サイトの実測データ（ページサイズ・TTFB・ロード時間）を根拠として引用すること。
+  例: ✅「ページサイズ756.9KBはテキスト主体のサイトとして過大。画像をWebPに変換し300KB以下を目標にする」
+  例: ❌「画像をWebPフォーマットで提供し、ページの読み込み速度を向上させることを検討する」
+- 実測値が閾値内（ロード1000ms以下・TTFB200ms以下・サイズ500KB以下）の場合、その項目のfindings severityはlowにし、strengthsに記載すること。
+- 「〜を検討してください」「〜することをお勧めします」「〜を検討する」という表現を禁止する。
+  必ず「→ [具体的な実装方法]」の形式で断定的に記述すること。
+- 全ての推奨が「href="#"」「遅延読み込み」「WebP」「構造化データ」のいずれかのみで構成される場合、
+  HTMLソースからより具体的な問題点（例: meta description の文字数・h1 の内容・canonical の有無）を特定して補足すること。
 
 必ず以下の JSON 形式のみで回答してください:
 {
@@ -52,7 +62,8 @@ meta description: {meta}
 
 JSON のみで回答してください。"""
 
-    raw = call_llm("technical", SYSTEM_PROMPT, user_prompt, max_tokens=2500)
+    system = SYSTEM_PROMPT + "\n\n" + get_site_type_context(state)
+    raw = call_llm("technical", system, user_prompt, max_tokens=2500)
     data = parse_agent_json(raw)
     score = safe_score(data)
 

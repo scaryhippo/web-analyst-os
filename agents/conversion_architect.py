@@ -2,7 +2,7 @@
 Conversion Architect — コンバージョン設計の専門エージェント
 """
 from core.llm_router import call_llm
-from agents._base import parse_agent_json, safe_score, build_page_context
+from agents._base import parse_agent_json, safe_score, build_page_context, get_site_type_context
 
 SYSTEM_PROMPT = """あなたは「Conversion Architect」です。コンバージョン設計の専門家として、
 Webサイトのすべての要素が訪問者を目標行動に向けて動かしているかを判定します。
@@ -33,7 +33,8 @@ def conversion_architect_node(state: dict) -> dict:
 
 JSON のみで回答してください。"""
 
-    raw = call_llm("specialist", SYSTEM_PROMPT, user_prompt, max_tokens=2500)
+    system = SYSTEM_PROMPT + "\n\n" + get_site_type_context(state)
+    raw = call_llm("specialist", system, user_prompt, max_tokens=2500)
     data = parse_agent_json(raw)
     score = safe_score(data)
 

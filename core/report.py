@@ -1,6 +1,7 @@
 """
 Web Analyst OS — レポート生成・整形
 """
+import re
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
@@ -10,6 +11,88 @@ def _score_bar(score: int) -> str:
     """スコアを視覚的なバーで表現する"""
     filled = round(score / 10)
     return "█" * filled + "░" * (10 - filled)
+
+
+def clean_executive_summary(text: str) -> str:
+    """先頭の Markdown ヘッダー行（# で始まる行）を除去する"""
+    lines = text.strip().split("\n")
+    while lines and lines[0].strip().startswith("#"):
+        lines.pop(0)
+    return "\n".join(lines).strip()
+
+
+# ─── Fix 3: P2 品質フィルタ ───────────────────────────────────────────────────
+
+def filter_p2_quality(p2_items: list) -> list:
+    """
+    P2 からスコア羅列のみの項目を除去する。
+    「→」または具体的な改善アクションを含む項目のみ残す。
+    """
+    filtered = []
+    for item in p2_items:
+        if "→" in item:
+            filtered.append(item)
+        elif re.match(r"- \[(?!スコア)[^\]]+\]", item) and len(item) > 60:
+            filtered.append(item)
+    return filtered
+
+
+# ─── Fix 4: クロスエージェント重複除去 ──────────────────────────────────────
+
+DEDUP_KEYWORDS = [
+    ["CTA", "コンバージョン", "問い合わせ導線", "CTAが"],
+    ["社会的証明", "トラスト", "信頼", "実績", "クライアント名"],
+    ["価格", "料金", "価格帯", "費用"],
+    ["ナビゲーション", "ナビ", "グローバルナビ"],
+    ["モバイル", "タップ", "スマートフォン"],
+    ["パンくず", "breadcrumb"],
+    ["フォーカス", "キーボードナビ", "focus-visible"],
+    ["meta description", "メタディスクリプション"],
+    ["構造化データ", "JSON-LD", "OGP"],
+]
+
+
+def dedup_recommendations(items: list) -> list:
+    """
+    同一キーワードグループに属するアイテムが複数ある場合、
+    最初（通常最も詳細）のみ残す。
+    """
+    seen_groups: set = set()
+    result = []
+    for item in items:
+        item_lower = item.lower()
+        matched_group = None
+        for i, keywords in enumerate(DEDUP_KEYWORDS):
+            if sum(1 for kw in keywords if kw.lower() in item_lower) >= 2:
+                matched_group = i
+                break
+        if matched_group is None or matched_group not in seen_groups:
+            result.append(item)
+            if matched_group is not None:
+                seen_groups.add(matched_group)
+    return result
+
+
+# ─── Fix 2: P1 上限キャップ（最大5件） ───────────────────────────────────────
+
+P1_MAX = 5
+
+
+def cap_p1_items(p1_items: list, p2_items: list) -> tuple:
+    """
+    P1 を P1_MAX 件に絞る。超過分はP2先頭に移動する。
+    具体的な改善提案（[agent_name] 形式）を優先してP1に残し、
+    スコア評価のみの行はP2に降格する。
+    """
+    if len(p1_items) <= P1_MAX:
+        return p1_items, p2_items
+
+    specific = [item for item in p1_items if not item.strip().startswith("- [スコア") and not item.strip().startswith("[スコア")]
+    score_only = [item for item in p1_items if item.strip().startswith("- [スコア") or item.strip().startswith("[スコア")]
+
+    p1_final = specific[:P1_MAX]
+    overflow = specific[P1_MAX:] + score_only
+    return p1_final, overflow + p2_items
 
 
 def generate_report(state: dict) -> str:
@@ -28,6 +111,7 @@ def generate_report(state: dict) -> str:
     competitor_url = state.get("competitor_url")
     competitor_data = state.get("competitor_data")
     metrics = state.get("page_load_metrics", {})
+    site_type = state.get("site_type", "transactional")
 
     score_labels = [
         ("conversion",  "コンバージョン設計"),
@@ -37,10 +121,18 @@ def generate_report(state: dict) -> str:
         ("competitive", "競合ポジショニング"),
     ]
 
+    site_type_labels = {
+        "transactional": "流入型BtoB/BtoC",
+        "consulting":    "高単価・選別型コンサルティング",
+        "brand":         "ブランディング・認知目的",
+        "portfolio":     "作品集・実績提示",
+    }
+
     lines = [
         "# Web Analyst OS — 分析レポート",
         f"分析日時: {now}",
         f"対象 URL: {url}",
+        f"サイトタイプ: {site_type_labels.get(site_type, site_type)}",
         "━" * 40,
         "",
         "## スコアカード",
@@ -63,9 +155,15 @@ def generate_report(state: dict) -> str:
         "",
         "## エグゼクティブサマリー",
         "",
-        executive_summary,
+        clean_executive_summary(executive_summary),  # Fix 6: 二重ヘッダー除去
         "",
     ]
+
+    # Fix 4: 重複除去 → Fix 2: P1 キャップ → Fix 3: P2 品質フィルタ
+    p1_items = dedup_recommendations(p1_items)
+    p2_items = dedup_recommendations(p2_items)
+    p1_items, p2_items = cap_p1_items(p1_items, p2_items)
+    p2_items = filter_p2_quality(p2_items)
 
     # P1
     lines += ["## 🔴 P1 — 今すぐ対処（インパクト大）", ""]

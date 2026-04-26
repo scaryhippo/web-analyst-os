@@ -122,7 +122,8 @@ def synthesis_node(state: AnalystState) -> dict:
     config = load_config()
     messages = state.get("messages", [])
 
-    score_result = calculate_scores(messages, config)
+    site_type = state.get("site_type", "transactional")
+    score_result = calculate_scores(messages, config, site_type)
     overall = score_result.pop("overall", 50)
     scores = score_result  # { conversion, ux, brand_copy, technical, competitive }
 

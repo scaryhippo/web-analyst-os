@@ -2,7 +2,7 @@
 Competitive Positioning Analyst — 差別化の専門エージェント
 """
 from core.llm_router import call_llm
-from agents._base import parse_agent_json, safe_score, build_page_context
+from agents._base import parse_agent_json, safe_score, build_page_context, get_site_type_context
 
 SYSTEM_PROMPT = """あなたは「Competitive Positioning Analyst」です。差別化の専門家として、
 競合との文脈の中でこのサイトが何を記憶させるかを判定します。
@@ -48,7 +48,8 @@ def competitive_analyst_node(state: dict) -> dict:
 
 JSON のみで回答してください。"""
 
-    raw = call_llm("specialist", SYSTEM_PROMPT, user_prompt, max_tokens=2500)
+    system = SYSTEM_PROMPT + "\n\n" + get_site_type_context(state)
+    raw = call_llm("specialist", system, user_prompt, max_tokens=2500)
     data = parse_agent_json(raw)
     score = safe_score(data)
 

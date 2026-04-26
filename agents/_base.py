@@ -36,6 +36,35 @@ def safe_score(data: dict, default: int = 50) -> int:
         return default
 
 
+SITE_TYPE_CONTEXT = {
+    "transactional": (
+        "【評価文脈】このサイトはBtoB/BtoCの流入・問合せ獲得を主目的とする。"
+        "価格透明性・CTAの明確さ・社会的証明を重視して評価せよ。"
+    ),
+    "consulting": (
+        "【評価文脈】このサイトは高単価・選別型のコンサルティングサービスを扱う。"
+        "価格非掲載は業界慣行であり減点しない。"
+        "代わりに、経歴の具体性・実績の信頼性・差別化ポジショニングを重点的に評価せよ。"
+    ),
+    "brand": (
+        "【評価文脈】このサイトはブランディング・認知形成を主目的とする。"
+        "直接的なコンバージョン導線の欠如は必ずしも欠点ではない。"
+        "ブランドボイスの一貫性・世界観の伝達力を重視して評価せよ。"
+    ),
+    "portfolio": (
+        "【評価文脈】このサイトは作品・実績の提示を主目的とする。"
+        "視覚的な強さ・作品の見やすさ・クリエイターとしての差別化を重視し、"
+        "コンバージョン最適化は副次的に評価せよ。"
+    ),
+}
+
+
+def get_site_type_context(state: dict) -> str:
+    """サイトタイプに応じた評価文脈文字列を返す"""
+    site_type = state.get("site_type", "transactional")
+    return SITE_TYPE_CONTEXT.get(site_type, SITE_TYPE_CONTEXT["transactional"])
+
+
 def build_page_context(state: dict) -> str:
     """エージェントに渡すページコンテキスト文字列を組み立てる"""
     title = state.get("page_title", "")

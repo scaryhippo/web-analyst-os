@@ -44,3 +44,4 @@ class AnalystState(TypedDict):
     current_phase: str
     error: Optional[str]
     run_red_team: bool                # False の場合は Phase 2 をスキップ
+    site_type: str                    # transactional / brand / portfolio / consulting
