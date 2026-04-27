@@ -51,6 +51,14 @@ class AnalystState(TypedDict):
     competitor_title: str       # 競合サイトのページタイトル
     competitor_scores: Dict     # 競合サイトの推定スコア（competitive_analyst が出力）
 
+    # Phase 0.5: サイトタイプ自動分類
+    site_type_confidence: str   # "high" | "medium" | "low" | "explicit"
+    site_type_signals: List     # 自動判定の根拠シグナル（明示指定時は空リスト）
+    site_type_reasoning: str    # 自動判定の理由（明示指定時は空文字）
+
+    # --context オプション
+    context: str                # 依頼者提供の分析コンテキスト（空の場合は ""）
+
     # メタ
     current_phase: str
     error: Optional[str]

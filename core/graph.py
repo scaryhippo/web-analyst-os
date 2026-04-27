@@ -18,6 +18,7 @@ from agents.brand_copy_analyst import brand_copy_analyst_node
 from agents.technical_auditor import technical_auditor_node
 from agents.competitive_analyst import competitive_analyst_node
 from agents.skeptical_firsttimer import red_team_attack_node, specialist_rebuttal_node
+from agents.site_classifier import site_classifier_node
 
 
 # ─────────────────────────────────────────────
@@ -261,6 +262,7 @@ def create_analyst_graph():
     graph = StateGraph(AnalystState)
 
     graph.add_node("browser_collection", browser_collection_node)
+    graph.add_node("site_classifier", site_classifier_node)   # Phase 0.5
     graph.add_node("specialist_analysis", specialist_analysis_node)
     graph.add_node("red_team_attack", red_team_attack_node)
     graph.add_node("specialist_rebuttal", specialist_rebuttal_node)
@@ -273,10 +275,11 @@ def create_analyst_graph():
         "browser_collection",
         should_continue,
         {
-            "continue": "specialist_analysis",
+            "continue": "site_classifier",   # Phase 0 → Phase 0.5
             "error_end": END,
         },
     )
+    graph.add_edge("site_classifier", "specialist_analysis")  # Phase 0.5 → Phase 1
     graph.add_edge("specialist_analysis", "synthesis")
 
     graph.add_conditional_edges(

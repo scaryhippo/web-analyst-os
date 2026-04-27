@@ -41,9 +41,11 @@ def build_initial_state(
     focus: str,
     task_id: str,
     run_red_team: bool,
-    site_type: str = "transactional",
-    crawl_subpages: bool = False,
+    site_type: str = "",
+    crawl_subpages: bool = True,
     crawl_max: int = 3,
+    context: str = "",
+    explicit_site_type: bool = False,
 ) -> dict:
     return {
         "target_url": url,
@@ -54,11 +56,16 @@ def build_initial_state(
         "site_type": site_type,
         "crawl_subpages": crawl_subpages,
         "crawl_max": crawl_max,
+        "context": context,
         "subpages": [],
         "structured_data": {},
         "competitive_analysis": "",
         "competitor_title": "",
         "competitor_scores": {},
+        # Phase 0.5: サイトタイプ自動分類
+        "site_type_confidence": "explicit" if explicit_site_type else "",
+        "site_type_signals": [],
+        "site_type_reasoning": "",
         # Phase 0（初期化）
         "page_title": "",
         "page_meta_description": "",
@@ -89,7 +96,7 @@ def build_initial_state(
     }
 
 
-def run_analysis(url: str, competitor_url: str = "", focus: str = "all", run_red_team: bool = True, site_type: str = "transactional", crawl_subpages: bool = False, crawl_max: int = 3):
+def run_analysis(url: str, competitor_url: str = "", focus: str = "all", run_red_team: bool = True, site_type: str = "", crawl_subpages: bool = True, crawl_max: int = 3, context: str = "", explicit_site_type: bool = False):
     config = load_config()
     version = config.get("system_version", "1.0.0")
 
@@ -98,7 +105,7 @@ def run_analysis(url: str, competitor_url: str = "", focus: str = "all", run_red
     task_id = str(uuid.uuid4())[:8]
     start_time = time.time()
 
-    initial_state = build_initial_state(url, competitor_url, focus, task_id, run_red_team, site_type, crawl_subpages, crawl_max)
+    initial_state = build_initial_state(url, competitor_url, focus, task_id, run_red_team, site_type, crawl_subpages, crawl_max, context, explicit_site_type)
 
     # グラフ実行（LangGraph はストリーミングせず invoke で実行）
     print_phase_header("[Phase 0] ブラウザでページを収集中...")
@@ -224,15 +231,16 @@ def run_analysis(url: str, competitor_url: str = "", focus: str = "all", run_red
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Web Analyst OS — AI マルチエージェント Web 分析",
+        description="Web Analyst OS v2.0 — AI マルチエージェント Web 分析",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""使用例:
   python main.py https://scaryhippo.jp
   python main.py https://scaryhippo.jp --site-type consulting
   python main.py https://atelier-a3.jp  --site-type portfolio
   python main.py https://scaryhippo.jp --competitor https://example.com
-  python main.py https://scaryhippo.jp --focus conversion
   python main.py https://scaryhippo.jp --no-red-team
+  python main.py https://scaryhippo.jp --no-subpages
+  python main.py https://scaryhippo.jp --context "主客層は30代子育て世帯。競合は近隣3店舗。"
 """,
     )
     parser.add_argument("url", help="分析対象の URL")
@@ -255,10 +263,10 @@ def main():
     parser.add_argument(
         "--site-type",
         choices=["transactional", "brand", "portfolio", "consulting"],
-        default="transactional",
+        default="",
         dest="site_type",
         help=(
-            "サイトのビジネスモデルタイプ（デフォルト: transactional）\n"
+            "サイトタイプを明示指定（省略時は Phase 0.5 で自動判定）\n"
             "  transactional: 流入型BtoB/BtoC\n"
             "  consulting:    高単価・選別型（価格非掲載を減点しない）\n"
             "  brand:         ブランディング・認知目的\n"
@@ -266,29 +274,38 @@ def main():
         ),
     )
     parser.add_argument(
-        "--crawl-subpages",
+        "--no-subpages",
         action="store_true",
         default=False,
-        dest="crawl_subpages",
-        help="ナビゲーションリンクから最大 --crawl-max 件のサブページを追加収集する",
+        dest="no_subpages",
+        help="サブページ収集を無効化する（デフォルトは収集あり）",
     )
     parser.add_argument(
         "--crawl-max",
         type=int,
         default=3,
         dest="crawl_max",
-        help="--crawl-subpages 使用時の最大収集サブページ数（デフォルト: 3）",
+        help="サブページ収集の最大件数（デフォルト: 3）",
+    )
+    parser.add_argument(
+        "--context",
+        type=str,
+        default="",
+        help="分析コンテキストを自由テキストで補足する（例：'家族向け写真スタジオ。30代子育て世帯が主客層。'）",
     )
     args = parser.parse_args()
 
+    explicit = bool(args.site_type)
     run_analysis(
         url=args.url,
         competitor_url=args.competitor,
         focus=args.focus,
         run_red_team=not args.no_red_team,
         site_type=args.site_type,
-        crawl_subpages=args.crawl_subpages,
+        crawl_subpages=not args.no_subpages,
         crawl_max=args.crawl_max,
+        context=args.context,
+        explicit_site_type=explicit,
     )
 
 

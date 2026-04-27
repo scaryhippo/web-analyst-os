@@ -65,6 +65,23 @@ def get_site_type_context(state: dict) -> str:
     return SITE_TYPE_CONTEXT.get(site_type, SITE_TYPE_CONTEXT["transactional"])
 
 
+def build_context_prefix(state: dict) -> str:
+    """--context オプションの値をシステムプロンプト先頭に注入するブロックを生成する"""
+    context = state.get("context", "").strip()
+    if not context:
+        return ""
+    return f"""【分析コンテキスト（依頼者提供情報）】
+{context}
+
+上記のコンテキストを踏まえて分析を行うこと。
+競合設定・ターゲット顧客・地域性・ビジネスモデルに関する言及がある場合は、
+スコアリングと改善提案の優先度に反映させること。
+
+---
+
+"""
+
+
 def build_structured_data_context(state: dict) -> str:
     """JSON-LD 構造化データをエージェントに渡すコンテキスト文字列を組み立てる"""
     sd = state.get("structured_data", {})

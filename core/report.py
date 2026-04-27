@@ -282,6 +282,7 @@ def generate_report(state: dict) -> str:
     competitor_data = state.get("competitor_data")
     metrics = state.get("page_load_metrics", {})
     site_type = state.get("site_type", "transactional")
+    site_type_confidence = state.get("site_type_confidence", "")
     subpages = state.get("subpages", [])
 
     score_labels = [
@@ -298,12 +299,21 @@ def generate_report(state: dict) -> str:
         "brand":         "ブランディング・認知目的",
         "portfolio":     "作品集・実績提示",
     }
+    _label = site_type_labels.get(site_type, site_type)
+    if site_type_confidence == "explicit":
+        site_type_line = f"サイトタイプ: {_label}（明示指定）"
+    elif site_type_confidence == "high":
+        site_type_line = f"サイトタイプ: {_label}（自動判定・確信度：高）"
+    elif site_type_confidence == "medium":
+        site_type_line = f"サイトタイプ: {_label}（自動判定・確信度：中 — 異なる場合は --site-type で上書き可能）"
+    else:
+        site_type_line = f"サイトタイプ: {_label}（自動判定・確信度：低 — --site-type で上書きを推奨）"
 
     lines = [
         "# Web Analyst OS — 分析レポート",
         f"分析日時: {now}",
         f"対象 URL: {url}",
-        f"サイトタイプ: {site_type_labels.get(site_type, site_type)}",
+        site_type_line,
     ]
     if subpages:
         sub_labels = " | ".join(
