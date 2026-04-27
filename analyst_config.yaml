@@ -15,7 +15,7 @@ browser:
   viewport_height: 900
   mobile_viewport_width: 390
   mobile_viewport_height: 844
-  timeout_ms: 30000
+  timeout_ms: 60000
   screenshot_full_page: true
   wait_for_load: "load"
 
