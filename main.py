@@ -56,6 +56,9 @@ def build_initial_state(
         "crawl_max": crawl_max,
         "subpages": [],
         "structured_data": {},
+        "competitive_analysis": "",
+        "competitor_title": "",
+        "competitor_scores": {},
         # Phase 0（初期化）
         "page_title": "",
         "page_meta_description": "",

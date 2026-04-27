@@ -59,6 +59,8 @@ def browser_collection_node(state: AnalystState) -> dict:
         except Exception:
             competitor_data = None
 
+    competitor_title = competitor_data.get("page_title", "") if competitor_data else ""
+
     return {
         "page_title": data["page_title"],
         "page_meta_description": data["page_meta_description"],
@@ -70,6 +72,7 @@ def browser_collection_node(state: AnalystState) -> dict:
         "structured_data": data.get("structured_data", {}),
         "subpages": data.get("subpages", []),
         "competitor_data": competitor_data,
+        "competitor_title": competitor_title,
         "current_phase": "phase0_complete",
         "error": None,
     }
@@ -102,6 +105,8 @@ def specialist_analysis_node(state: AnalystState) -> dict:
     nodes = _FOCUS_MAP.get(focus, _SPECIALIST_NODES)
 
     all_messages = []
+    competitive_analysis = ""
+    competitor_scores: dict = {}
     state_dict = dict(state)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
@@ -110,15 +115,22 @@ def specialist_analysis_node(state: AnalystState) -> dict:
             try:
                 result = future.result()
                 all_messages.extend(result.get("messages", []))
+                # competitive_analyst の追加フィールドを回収
+                if result.get("competitive_analysis"):
+                    competitive_analysis = result["competitive_analysis"]
+                if result.get("competitor_scores"):
+                    competitor_scores = result["competitor_scores"]
             except Exception as e:
                 node_fn = futures[future]
                 name = getattr(node_fn, "__name__", str(node_fn))
                 print(f"  [警告] {name} が失敗しました: {str(e)[:120]}")
 
-    return {
-        "messages": all_messages,
-        "current_phase": "phase1_complete",
-    }
+    result = {"messages": all_messages, "current_phase": "phase1_complete"}
+    if competitive_analysis:
+        result["competitive_analysis"] = competitive_analysis
+    if competitor_scores:
+        result["competitor_scores"] = competitor_scores
+    return result
 
 
 # ─────────────────────────────────────────────

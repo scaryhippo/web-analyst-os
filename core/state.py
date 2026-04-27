@@ -46,6 +46,11 @@ class AnalystState(TypedDict):
     # JSON-LD 構造化データ（営業時間・料金・評価等）
     structured_data: Dict
 
+    # 競合比較（--competitor 指定時のみ）
+    competitive_analysis: str   # competitive_analyst の生出力（<competitive_summary>抽出用）
+    competitor_title: str       # 競合サイトのページタイトル
+    competitor_scores: Dict     # 競合サイトの推定スコア（competitive_analyst が出力）
+
     # メタ
     current_phase: str
     error: Optional[str]

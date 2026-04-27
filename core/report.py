@@ -21,6 +21,43 @@ def clean_executive_summary(text: str) -> str:
     return "\n".join(lines).strip()
 
 
+def extract_competitive_summary(text: str) -> str:
+    """competitive_analyst の出力から <competitive_summary> タグの内容を抽出する"""
+    match = re.search(r'<competitive_summary>(.*?)</competitive_summary>', text, re.DOTALL)
+    return match.group(1).strip() if match else ""
+
+
+def generate_score_comparison_table(self_scores: dict, competitor_scores: dict, competitor_title: str = "競合サイト") -> str:
+    """自社と競合のスコアを横並びで比較する Markdown テーブルを生成する"""
+    AXES = [
+        ("conversion", "コンバージョン設計"),
+        ("ux",         "UX・使いやすさ"),
+        ("brand_copy", "ブランド・コピー"),
+        ("technical",  "技術・パフォーマンス"),
+        ("competitive","競合ポジショニング"),
+    ]
+    lines = [
+        "### スコア比較\n",
+        f"| 評価軸 | 自社 | {competitor_title} | 差分 |",
+        "|---|---|---|---|",
+    ]
+    total_s, total_c = 0, 0
+    for key, label in AXES:
+        s = self_scores.get(key, 0)
+        c = competitor_scores.get(key, 0)
+        diff = s - c
+        diff_str = f"**+{diff}**" if diff > 0 else (f"**{diff}**" if diff < 0 else "±0")
+        lines.append(f"| {label} | {s}/100 | {c}/100 | {diff_str} |")
+        total_s += s
+        total_c += c
+    n = len(AXES)
+    avg_s, avg_c = total_s // n, total_c // n
+    diff_avg = avg_s - avg_c
+    diff_str = f"**+{diff_avg}**" if diff_avg > 0 else (f"**{diff_avg}**" if diff_avg < 0 else "±0")
+    lines.append(f"| **総合** | **{avg_s}/100** | **{avg_c}/100** | {diff_str} |")
+    return "\n".join(lines)
+
+
 def clean_skeptical_output(text: str) -> str:
     """
     Skeptical First-Timer の出力から自己修正（再判定）の痕跡を除去する。
@@ -52,24 +89,48 @@ def clean_items(items: list) -> list:
     return [clean_arrow_formatting(item) for item in items]
 
 
-# ─── Fix 3: P2 品質フィルタ ───────────────────────────────────────────────────
+# ─── Fix 3 / Fix B: P2・P3 品質フィルタ + 称賛観察の分離 ──────────────────────
 
-def filter_section_quality(items: list) -> list:
+_POSITIVE_PATTERNS = [
+    r'は非常に優れ', r'は優れ(た|てい)', r'は良好', r'は適切に設定',
+    r'は正しく実装', r'は十分', r'は高水準', r'は優秀', r'問題はない',
+    r'に問題が?な[いく]', r'は許容範囲', r'は優位', r'非常に高速',
+    r'は最適化されて', r'は軽量', r'は問題なし',
+]
+
+
+def is_positive_observation(item: str) -> bool:
+    """矢印の後が現状肯定文（称賛観察）かを判定する"""
+    if '→' not in item:
+        return False
+    after_arrow = item.split('→', 1)[1]
+    for pattern in _POSITIVE_PATTERNS:
+        if re.search(pattern, after_arrow):
+            return True
+    return False
+
+
+def filter_section_quality(items: list) -> tuple:
     """
-    スコアのみの項目（アクション指示「→」を持たない）をフィルタする。
-    P2・P3 の両方に適用する。
+    スコアのみ項目を除去し、称賛観察を強みセクション用に分離する。
+    Returns: (改善推奨アイテムリスト, 強みとして追加すべきアイテムリスト)
     """
     filtered = []
+    praise_items = []
     for item in items:
-        if "→" in item:
+        if is_positive_observation(item):
+            praise_items.append(item)
+        elif "→" in item:
             filtered.append(item)
         elif re.match(r"- \[(?!スコア)[^\]]+\]", item) and len(item) > 60:
             filtered.append(item)
+    return filtered, praise_items
+
+
+# 後方互換エイリアス（戻り値が変わったため注意）
+def filter_p2_quality(items: list) -> list:
+    filtered, _ = filter_section_quality(items)
     return filtered
-
-
-# 後方互換エイリアス
-filter_p2_quality = filter_section_quality
 
 
 # ─── Fix A: 重複除去（トピックグループベース、P1/P2/P3 統合処理） ─────────────
@@ -105,6 +166,16 @@ DEDUP_TOPIC_GROUPS = [
     ["BtoB.*BtoC", "施設担当者.*求職者", "ターゲット.*分離", "ターゲット.*分岐"],
     # H1・ヒーローコピーの明確性
     ["H1.*コピー", "ヒーロー.*5秒", "ファーストビュー.*伝わらない", "5秒以内.*伝わら"],
+    # 英日混在トーン（Fix C 追加）
+    ["英日混在", "英語・日本語", "言語統一", "トーン統一", "英語混在", "バイリンガル", "英語主体", "日本語主体"],
+    # ナビゲーション不在（Fix C 追加）
+    ["グローバルナビが", "ナビゲーションが.*ない", "固定ヘッダー", "スティッキー.*ナビ", "ナビがない"],
+    # フォーム設計（Fix C 追加）
+    ["インラインバリデーション", "送信後.*サンクス", "サンクスページ", "フォーム摩擦", "入力ガイダンス"],
+    # セキュリティ認証（Fix C 追加）
+    ["ISO27001", "ISMS", "第三者認証", "セキュリティ認証", "第三者監査"],
+    # 定休日例外（Fix C 追加）
+    ["定休日", "日曜.*祝日", "日祝", "要予約で承"],
 ]
 
 
@@ -256,9 +327,10 @@ def generate_report(state: dict) -> str:
     p1_items, p2_items = cap_p1_items(p1_items, p2_items)
     p2_items, p3_items = cap_p2_items(p2_items, p3_items)
 
-    # Fix 3 / Fix 2(v1.3): P2・P3 品質フィルタ（スコア羅列のみ除去）
-    p2_items = filter_section_quality(p2_items)
-    p3_items = filter_section_quality(p3_items)
+    # Fix B: P2・P3 品質フィルタ + 称賛アイテムを強みへ分離
+    p2_items, p2_praise = filter_section_quality(p2_items)
+    p3_items, p3_praise = filter_section_quality(p3_items)
+    strengths = strengths + [p.lstrip("- ") for p in p2_praise + p3_praise]
 
     # P1
     lines += ["## 🔴 P1 — 今すぐ対処（インパクト大）", ""]
@@ -320,18 +392,28 @@ def generate_report(state: dict) -> str:
                 "",
             ]
 
-    # 競合比較
+    # 競合比較（Fix A: 充実版）
     if competitor_url and competitor_data:
-        c_title = competitor_data.get("page_title", "")
-        lines += [
-            "## 競合比較",
-            "",
-            f"競合 URL: {competitor_url}",
-            f"競合サイトタイトル: {c_title}",
-            "",
-            "（詳細な差分は Competitive Positioning Analyst のスコアに反映されています）",
-            "",
-        ]
+        comp_title = state.get("competitor_title") or competitor_data.get("page_title", "競合サイト")
+        comp_scores = state.get("competitor_scores", {})
+        comp_analysis_raw = state.get("competitive_analysis", "")
+
+        lines += ["## 競合比較", "",
+                  f"競合 URL: {competitor_url}",
+                  f"競合サイトタイトル: {comp_title}",
+                  ""]
+
+        # スコア比較テーブル
+        if comp_scores and scores:
+            lines.append(generate_score_comparison_table(scores, comp_scores, comp_title))
+            lines.append("")
+
+        # 競合比較サマリー
+        competitive_summary = extract_competitive_summary(comp_analysis_raw)
+        if competitive_summary:
+            lines += ["### 競合比較分析", "", competitive_summary, ""]
+        else:
+            lines += ["（詳細な差分は Competitive Positioning Analyst のスコアに反映されています）", ""]
 
     # 技術メトリクス補足
     if metrics:

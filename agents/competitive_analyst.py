@@ -21,7 +21,7 @@ SYSTEM_PROMPT = """あなたは「Competitive Positioning Analyst」です。差
 - 70〜79の範囲に集中することを避け、サイトの実態に基づき0〜100の全範囲を積極的に活用すること。
 - 評価の根拠を1〜2文で示した上でスコアを確定すること。
 
-必ず以下の JSON 形式のみで回答してください:
+必ず以下の JSON 形式で回答してください:
 {
   "score": 0から100の整数,
   "summary": "1-2行の要約",
@@ -30,6 +30,42 @@ SYSTEM_PROMPT = """あなたは「Competitive Positioning Analyst」です。差
   ],
   "strengths": ["強み1", "強み2"]
 }"""
+
+COMPETITOR_EXTRA_PROMPT = """
+【競合比較モード時の追加出力】
+上記JSONの後に、以下の<competitive_summary>タグで囲まれた競合比較サマリーを必ず追加出力すること。
+
+また、JSONに "competitor_scores" フィールドを追加し、競合サイトの各軸の推定スコアを出力すること:
+{
+  "score": ...,
+  "competitor_scores": {
+    "conversion": 0-100,
+    "ux": 0-100,
+    "brand_copy": 0-100,
+    "technical": 0-100,
+    "competitive": 0-100
+  },
+  ...
+}
+
+<competitive_summary>
+自社優位軸:
+- [評価軸名]: [1文で根拠を示す。例：「技術・パフォーマンス: ロード432ms vs 競合693msで1.6倍高速」]
+（最大3点、具体的なデータ・コピー・機能の差を根拠とする）
+
+競合優位軸:
+- [評価軸名]: [1文で根拠を示す。例：「社会的証明: 競合はプロダクトSaaSで導入企業名を公開」]
+（最大3点、同様に根拠必須）
+
+戦略的示唆:
+[2〜3文で「自社が取るべき差別化アクション」を具体的に述べる。
+ 競合が強い軸で真っ向勝負せず、自社優位軸をどう活かすかの方向性を示す。]
+</competitive_summary>
+
+注意:
+- 推測ではなく収集したサイトデータに基づいて記述すること
+- 「総じて」「概して」等の抽象表現は使わないこと
+"""
 
 
 def competitive_analyst_node(state: dict) -> dict:
@@ -48,19 +84,25 @@ def competitive_analyst_node(state: dict) -> dict:
 {c_text}
 """
 
+    has_competitor = bool(state.get("competitor_url") and state.get("competitor_data"))
+
     subpages_context = build_subpages_context(state)
     user_prompt = f"""以下のWebサイトの競合ポジショニングを分析してください。
 
 {page_context}
 {competitor_section}{subpages_context}
 
-JSON のみで回答してください。"""
+JSON{"と<competitive_summary>タグ" if has_competitor else "のみ"}で回答してください。"""
 
     _sd_ctx = build_structured_data_context(state)
-    system = SYSTEM_PROMPT + "\n\n" + get_site_type_context(state) + (("\n\n" + _sd_ctx) if _sd_ctx else "")
-    raw = call_llm("specialist", system, user_prompt, max_tokens=2500)
+    extra = COMPETITOR_EXTRA_PROMPT if has_competitor else ""
+    system = SYSTEM_PROMPT + extra + "\n\n" + get_site_type_context(state) + (("\n\n" + _sd_ctx) if _sd_ctx else "")
+    max_tok = 3500 if has_competitor else 2500
+    raw = call_llm("specialist", system, user_prompt, max_tokens=max_tok)
     data = parse_agent_json(raw)
     score = safe_score(data)
+
+    competitor_scores = data.get("competitor_scores", {})
 
     msg = {
         "agent": "competitive_analyst",
@@ -71,4 +113,7 @@ JSON のみで回答してください。"""
         "strengths": data.get("strengths", []),
         "raw": raw,
     }
-    return {"messages": [msg], "current_phase": "phase1_competitive"}
+    result = {"messages": [msg], "current_phase": "phase1_competitive", "competitive_analysis": raw}
+    if competitor_scores:
+        result["competitor_scores"] = competitor_scores
+    return result
