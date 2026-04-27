@@ -176,7 +176,30 @@ DEDUP_TOPIC_GROUPS = [
     ["ISO27001", "ISMS", "第三者認証", "セキュリティ認証", "第三者監査"],
     # 定休日例外（Fix C 追加）
     ["定休日", "日曜.*祝日", "日祝", "要予約で承"],
+    # 事例・実績の具体性（v1.5.1 追加）
+    ["Case Stud", "ケーススタディ", "事例", "匿名", "規模感", "数値成果", "定量成果", "実績の具体"],
+    # ページ速度・パフォーマンス（v1.5.1 追加）
+    ["ページロード", "TTFB", "ロード時間", "表示速度", "高速", "軽量", "KBと", "msと"],
+    # 社会的証明・実績数値（v1.5.1 追加）
+    ["社会的証明", "導入実績", "顧客名", "顧客ロゴ", "実績件数", "導入企業数", "導入自治体数", "推薦"],
+    # プロフィール・経歴の検証可能性（v1.5.1 追加）
+    ["LinkedIn", "在任期間", "MBBファーム", "経歴の検証", "公的記録", "プロフィール詳細", "キャリア詳細"],
+    # サービス3分類・ターゲット設計（v1.5.1 追加）
+    ["3サービス", "Gov向け", "GovTech向け", "Market Strategy", "ターゲット別", "サービス分類", "3本柱"],
 ]
+
+
+def dedup_recommendations(items: list) -> list:
+    """単一リストに対してトピックグループベースの重複除去を行う（Strengths等に使用）"""
+    seen_groups: set = set()
+    result = []
+    for item in items:
+        group_idx = _match_topic_group(item.lower())
+        if group_idx is None or group_idx not in seen_groups:
+            result.append(item)
+            if group_idx is not None:
+                seen_groups.add(group_idx)
+    return result
 
 
 def _match_topic_group(item_lower: str) -> int | None:
@@ -331,6 +354,11 @@ def generate_report(state: dict) -> str:
     p2_items, p2_praise = filter_section_quality(p2_items)
     p3_items, p3_praise = filter_section_quality(p3_items)
     strengths = strengths + [p.lstrip("- ") for p in p2_praise + p3_praise]
+
+    # Fix 2 (v1.5.1): Strengths 内の重複排除
+    strengths_as_items = [f"- {s}" if not s.startswith("- ") else s for s in strengths]
+    strengths_as_items = dedup_recommendations(strengths_as_items)
+    strengths = [s.lstrip("- ") for s in strengths_as_items]
 
     # P1
     lines += ["## 🔴 P1 — 今すぐ対処（インパクト大）", ""]
