@@ -9,6 +9,7 @@ from langgraph.graph import StateGraph, END
 from core.state import AnalystState
 from core.browser import BrowserCollector
 from core.scorer import calculate_scores
+from core.report import calculate_weighted_total
 from core.report import generate_report
 from core.llm_router import load_config
 
@@ -142,10 +143,13 @@ def synthesis_node(state: AnalystState) -> dict:
     config = load_config()
     messages = state.get("messages", [])
 
-    site_type = state.get("site_type", "transactional")
+    # v3.0: evaluation_profile による重み付きスコア計算
+    evaluation_profile = state.get("evaluation_profile", {})
+    site_type = state.get("site_type", "transactional")  # 後方互換
     score_result = calculate_scores(messages, config, site_type)
-    overall = score_result.pop("overall", 50)
-    scores = score_result  # { conversion, ux, brand_copy, technical, competitive }
+    score_result.pop("overall", None)  # scorer の overall を除去し、profile ベースで再計算
+    scores = score_result
+    overall = calculate_weighted_total(scores, evaluation_profile)
 
     # 優先度分類
     p1_thresh = config["priority"]["p1_score_threshold"]

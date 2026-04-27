@@ -2,6 +2,7 @@
 Competitive Positioning Analyst — 差別化の専門エージェント
 """
 from core.llm_router import call_llm
+from core.agent_utils import build_profile_instruction
 from agents._base import build_context_prefix, build_structured_data_context, parse_agent_json, safe_score, build_page_context, get_site_type_context, build_subpages_context
 
 SYSTEM_PROMPT = """あなたは「Competitive Positioning Analyst」です。差別化の専門家として、
@@ -118,9 +119,10 @@ def competitive_analyst_node(state: dict) -> dict:
 JSON{"と<competitive_summary>タグ" if has_competitor else "のみ"}で回答してください。"""
 
     _ctx_prefix = build_context_prefix(state)
+    _profile_instr = build_profile_instruction(state.get("evaluation_profile", {}), "competitive")
     _sd_ctx = build_structured_data_context(state)
     extra = COMPETITOR_EXTRA_PROMPT if has_competitor else ""
-    system = _ctx_prefix + SYSTEM_PROMPT + extra + "\n\n" + get_site_type_context(state) + (("\n\n" + _sd_ctx) if _sd_ctx else "")
+    system = _ctx_prefix + SYSTEM_PROMPT + extra + "\n\n" + get_site_type_context(state) + (("\n\n" + _sd_ctx) if _sd_ctx else "") + (("\n\n" + _profile_instr) if _profile_instr else "")
     max_tok = 3500 if has_competitor else 2500
     raw = call_llm("specialist", system, user_prompt, max_tokens=max_tok)
     data = parse_agent_json(raw)

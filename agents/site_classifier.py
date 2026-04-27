@@ -1,69 +1,99 @@
 """
-Web Analyst OS — Phase 0.5: サイトタイプ自動分類エージェント
-Phase 0（ブラウザ収集）の直後に実行し、state["site_type"] を自動設定する。
---site-type が明示指定されている場合はスキップされる。
+Web Analyst OS v3.0 — Phase 0.5: サイト評価次元プロファイル生成エージェント
+固定ラベルではなく 10次元の評価ウェイトを直接出力する。
 """
 import json
+import re
 from core.llm_router import call_llm
-from agents._base import parse_agent_json
 
-CLASSIFIER_SYSTEM_PROMPT = """あなたはWebサイトのビジネスタイプを分類する専門家です。
-収集したサイトデータを分析し、以下の4タイプのうち最も適切なものを判定してください。
+CLASSIFIER_SYSTEM_PROMPT = """あなたはWebサイトの評価プロファイルを生成する専門家です。
+収集したサイトデータから、以下10次元の重要度スコアを出力してください。
 
-## サイトタイプ定義
+## 10評価次元の定義
 
-**transactional（流入型・予約/購買型）**
-特徴：料金表・予約フォーム・サービスメニュー・営業時間・所在地情報が存在する。
-訪問者に即座の行動（予約・購入・来店）を求める設計。
-例：写真スタジオ、飲食店、美容院、地域サービス、ECサイト
-シグナル：price / fee / 料金 / 予約 / booking / 営業時間 / アクセス
+1. price_disclosure_weight（価格透明性の重要度）
+   - 高い: 来訪者が価格を見て即決する類のサービス（地域店舗・EC・SaaS月額等）
+   - 低い: 価格が案件単位/要相談が業界標準のサービス（戦略コンサル・法律・行政調達）
 
-**consulting（高単価・選別型）**
-特徴：ケーススタディ・「要問い合わせ」型エンゲージメント・創業者の経歴・
-資格情報が前面に出る。価格は非公開またはプロジェクト単位。
-例：戦略コンサル、経営顧問、弁護士、独立系ブティック
-シグナル：case study / 実績 / 経歴 / selected / boutique / セッション / 顧問
+2. cta_immediacy_weight（即時コンバージョンの重要度）
+   - 高い: 「今すぐ予約」「カートに入れる」が主目的
+   - 低い: 長期検討・稟議・複数ステークホルダーを経て意思決定
 
-**portfolio（作品集・実績提示型）**
-特徴：ギャラリー・作品一覧が主軸。料金情報は副次的または皆無。
-視覚的訴求が中心で、直接的な購買よりも依頼検討を促す設計。
-例：フォトグラファー、グラフィックデザイナー、建築家
-シグナル：works / gallery / portfolio / 作品 / 制作実績
+3. lead_qualification_weight（リード選別の重要度）
+   - 高い: ミスマッチな問い合わせを事前に排除したい高単価・限定受注型
+   - 低い: 間口を広く取って量で勝負するビジネス
 
-**brand（コーポレートブランド型）**
-特徴：企業紹介・ニュース・採用・IR中心。直接的な購買・予約導線がない。
-例：大企業のコーポレートサイト、スタートアップの会社紹介
-シグナル：about / company / news / investor / recruit / IR / 会社概要
+4. social_proof_weight（社会的証明の重要度）
+   - 高い: 初回購買リスクが高く第三者評価が意思決定に必須
+   - 低い: 指名・紹介・限定コミュニティ内でのみ流通するサービス
+
+5. credential_display_weight（資格・経歴の重要度）
+   - 高い: 専門家の質が直接アウトカムに影響する（医療・法律・戦略コンサル）
+   - 低い: プロダクトの品質が人の資格より重要なEC・SaaS
+
+6. portfolio_display_weight（作品・実績表示の重要度）
+   - 高い: 仕上がりを見て依頼判断するクリエイティブ系
+   - 低い: 作品概念のないサービス・プロダクト型
+
+7. navigation_depth_weight（深いナビゲーションの必要度）
+   - 高い: 複数サービス・複数ターゲットが存在する複合サイト
+   - 低い: シングルプロダクト・シングルサービスのLP型
+
+8. mobile_optimization_weight（モバイル最適化の重要度）
+   - 高い: 一般消費者・外出先での購買判断が多い
+   - 低い: PCで稟議書を開きながら比較検討する行政・大企業担当者向け
+
+9. competitive_diff_weight（競合差別化の重要度）
+   - 高い: 類似サービスが多く選定理由の明示が必須
+   - 低い: カテゴリを独占する独自ニッチ・指名性の高いサービス
+
+10. trust_signal_weight（セキュリティ・信頼シグナルの重要度）
+    - 高い: 個人情報・機密情報・決済情報を取り扱う
+    - 低い: 情報提供のみで個人情報不要
 
 ## 出力形式
 
 以下のJSONを厳密に出力すること。JSON以外のテキストを含めないこと。
+値はすべて 0.1〜2.0 の範囲で、1.0 を「標準的な重要度」として設定する。
 
 {
-  "site_type": "transactional | consulting | portfolio | brand のいずれか1つ",
-  "confidence": "high | medium | low のいずれか1つ",
-  "primary_signals": ["判定根拠となったシグナルを3点以内で列挙"],
-  "reasoning": "判定理由を2文以内で述べる。サイトの特徴と選んだタイプの対応を明記する。"
-}
+  "site_type_label": "このサイトのビジネスタイプを日本語で自由に表現（例：GovTech SaaS型、地域密着型フォトスタジオ、戦略コンサルブティック）",
+  "confidence": "high | medium | low",
+  "reasoning": "判定の根拠を2文以内で。サイトの主要ビジネス特性と次元スコアの根拠を述べること。",
+  "evaluation_profile": {
+    "price_disclosure_weight":    数値,
+    "cta_immediacy_weight":       数値,
+    "lead_qualification_weight":  数値,
+    "social_proof_weight":        数値,
+    "credential_display_weight":  数値,
+    "portfolio_display_weight":   数値,
+    "navigation_depth_weight":    数値,
+    "mobile_optimization_weight": 数値,
+    "competitive_diff_weight":    数値,
+    "trust_signal_weight":        数値
+  }
+}"""
 
-## 判定ルール
 
-- 複数タイプの特徴を持つ場合は、訪問者に求める主要アクションが何かで判定する
-  （例：料金ページ+予約フォームがあればtransactional、たとえギャラリーがあっても）
-- 判定が困難な場合は confidence: low として transactional をデフォルトとする
-- ECサイト（カート機能あり）は transactional とする
-- GovTechのように B2G で人的コンサルが主体ならconsultingとする"""
+def _default_profile() -> dict:
+    """全次元を 1.0（標準）に設定したフォールバックプロファイル"""
+    return {k: 1.0 for k in [
+        "price_disclosure_weight", "cta_immediacy_weight", "lead_qualification_weight",
+        "social_proof_weight", "credential_display_weight", "portfolio_display_weight",
+        "navigation_depth_weight", "mobile_optimization_weight",
+        "competitive_diff_weight", "trust_signal_weight",
+    ]}
 
 
 def classify_site_type(state: dict) -> dict:
     """
-    Phase 0.5: ページテキストとメタ情報からサイトタイプを自動判定する。
+    Phase 0.5: 評価次元プロファイルを直接生成する。
     --site-type が明示指定（site_type_confidence == "explicit"）の場合は呼ばれない。
     """
-    page_text = state.get("page_text", "")[:3000]
-    url = state.get("target_url", "")
-    title = state.get("page_title", "")
-    meta_desc = state.get("page_meta_description", "")
+    page_text  = state.get("page_text", "")[:3000]
+    url        = state.get("target_url", "")
+    title      = state.get("page_title", "")
+    meta_desc  = state.get("page_meta_description", "")
     nav_labels = [sp.get("nav_label", "") for sp in state.get("subpages", []) if sp.get("nav_label")]
 
     user_message = f"""URL: {url}
@@ -75,40 +105,46 @@ meta description: {meta_desc}
 {page_text}"""
 
     try:
-        raw = call_llm("specialist", CLASSIFIER_SYSTEM_PROMPT, user_message, max_tokens=300)
-        # JSON を抽出してパース
-        import re
+        raw = call_llm("specialist", CLASSIFIER_SYSTEM_PROMPT, user_message, max_tokens=500)
         m = re.search(r'\{.*\}', raw, re.DOTALL)
         result = json.loads(m.group(0)) if m else {}
-        site_type = result.get("site_type", "transactional")
-        # バリデーション
-        if site_type not in ("transactional", "consulting", "portfolio", "brand"):
-            site_type = "transactional"
+
+        profile = result.get("evaluation_profile", {})
+        # 値を 0.1〜2.0 にクリップ
+        profile = {k: max(0.1, min(2.0, float(v))) for k, v in profile.items()}
+        if len(profile) < 5:
+            profile = _default_profile()
+
         return {
-            "site_type":            site_type,
+            "site_type_label":      result.get("site_type_label", "汎用型"),
             "site_type_confidence": result.get("confidence", "low"),
-            "site_type_signals":    result.get("primary_signals", []),
             "site_type_reasoning":  result.get("reasoning", ""),
+            "evaluation_profile":   profile,
         }
     except Exception as e:
         return {
-            "site_type":            "transactional",
+            "site_type_label":      "汎用型（判定失敗）",
             "site_type_confidence": "low",
-            "site_type_signals":    [],
-            "site_type_reasoning":  f"自動判定失敗（{e}）→ デフォルト transactional を使用",
+            "site_type_reasoning":  f"自動判定失敗（{e}）→ デフォルトプロファイル使用",
+            "evaluation_profile":   _default_profile(),
         }
 
 
 def site_classifier_node(state: dict) -> dict:
-    """LangGraph ノード: Phase 0.5 サイトタイプ自動分類"""
-    # 明示指定済みの場合はスキップ
+    """LangGraph ノード: Phase 0.5 評価プロファイル自動生成"""
     if state.get("site_type_confidence") == "explicit":
-        print(f"  [Phase 0.5] サイトタイプ明示指定: {state.get('site_type')}")
+        label = state.get("site_type_label", state.get("site_type", ""))
+        print(f"  [Phase 0.5] 評価プロファイル明示指定: {label}")
         return {"current_phase": "phase0.5_skip"}
 
     result = classify_site_type(state)
-    confidence_ja = {"high": "高", "medium": "中", "low": "低"}.get(result["site_type_confidence"], result["site_type_confidence"])
-    signals_str = "、".join(result["site_type_signals"]) if result["site_type_signals"] else "—"
-    print(f"  [Phase 0.5] サイトタイプ自動判定: {result['site_type']} （確信度：{confidence_ja}）")
-    print(f"             根拠: {signals_str}")
+    confidence_ja = {"high": "高", "medium": "中", "low": "低"}.get(
+        result["site_type_confidence"], result["site_type_confidence"]
+    )
+    profile = result["evaluation_profile"]
+    # 主要な高次元を表示
+    top = sorted(profile.items(), key=lambda x: x[1], reverse=True)[:3]
+    top_str = ", ".join(f"{k.replace('_weight','')}={v:.1f}" for k, v in top)
+    print(f"  [Phase 0.5] サイトタイプ: {result['site_type_label']} （確信度：{confidence_ja}）")
+    print(f"             高ウェイト次元: {top_str}")
     return {**result, "current_phase": "phase0.5_complete"}

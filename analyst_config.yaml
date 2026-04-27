@@ -1,5 +1,5 @@
 system_name: "Web Analyst OS"
-system_version: "2.0.0"
+system_version: "3.0.0"
 
 # LLM モデル設定
 models:
@@ -17,78 +17,98 @@ browser:
   mobile_viewport_height: 844
   timeout_ms: 30000
   screenshot_full_page: true
-  wait_for_load: "load"                # ページ完全ロードまで待機（networkidle はタイムアウトリスクあり）
+  wait_for_load: "load"
 
 # 分析設定
 analysis:
-  max_pages_per_run: 5                 # 1回の実行で分析するページ数上限
+  max_pages_per_run: 5
   include_mobile_check: true
-  competitor_comparison: false          # --competitor 指定時に true
-
-# スコアカード重み（デフォルト: transactional と同一）
-score_weights:
-  conversion: 30
-  ux: 25
-  brand_copy: 20
-  technical: 15
-  competitive: 10
-
-# サイトタイプ別プロファイル（--site-type で切り替え）
-site_type_profiles:
-  transactional:
-    score_weights:
-      conversion: 30
-      ux: 25
-      brand_copy: 20
-      technical: 15
-      competitive: 10
-    pricing_disclosure_required: true
-    cta_density_target: high
-    trust_signal_weight: high
-
-  consulting:
-    score_weights:
-      conversion: 20
-      ux: 20
-      brand_copy: 25
-      technical: 15
-      competitive: 20
-    pricing_disclosure_required: false
-    cta_density_target: low
-    trust_signal_weight: very_high
-
-  brand:
-    score_weights:
-      conversion: 15
-      ux: 25
-      brand_copy: 30
-      technical: 15
-      competitive: 15
-    pricing_disclosure_required: false
-    cta_density_target: low
-    trust_signal_weight: medium
-
-  portfolio:
-    score_weights:
-      conversion: 10
-      ux: 20
-      brand_copy: 25
-      technical: 20
-      competitive: 25
-    pricing_disclosure_required: false
-    cta_density_target: low
-    trust_signal_weight: low
+  competitor_comparison: false
 
 # 出力設定
 output:
   report_dir: "~/Projects/web-analyst-os/reports"
-  show_agent_preview: true             # 分析中に発言冒頭を表示
+  show_agent_preview: true
   agent_preview_chars: 120
   save_screenshots: true
   screenshot_dir: "~/Projects/web-analyst-os/screenshots"
 
 # 優先度分類閾値
 priority:
-  p1_score_threshold: 40              # スコア 40 未満の項目は P1
-  p2_score_threshold: 65              # 40〜65 は P2
-  # 65 以上は P3
+  p1_score_threshold: 40
+  p2_score_threshold: 65
+
+# ─── v3.0: 評価次元定義 ─────────────────────────────────────────────────────────
+# 全値は 0.1〜2.0。1.0 = 標準的な重要度
+
+evaluation_dimensions:
+  - price_disclosure_weight
+  - cta_immediacy_weight
+  - lead_qualification_weight
+  - social_proof_weight
+  - credential_display_weight
+  - portfolio_display_weight
+  - navigation_depth_weight
+  - mobile_optimization_weight
+  - competitive_diff_weight
+  - trust_signal_weight
+
+# ─── v3.0: 名前付きプリセット（--site-type で指定） ─────────────────────────────
+
+site_type_presets:
+
+  transactional:
+    label: "流入型・即時コンバージョン型"
+    profile:
+      price_disclosure_weight:    1.8
+      cta_immediacy_weight:       1.9
+      lead_qualification_weight:  0.3
+      social_proof_weight:        1.3
+      credential_display_weight:  0.5
+      portfolio_display_weight:   0.4
+      navigation_depth_weight:    1.0
+      mobile_optimization_weight: 1.6
+      competitive_diff_weight:    1.0
+      trust_signal_weight:        1.2
+
+  consulting:
+    label: "高単価・選別型コンサルティング"
+    profile:
+      price_disclosure_weight:    0.3
+      cta_immediacy_weight:       0.4
+      lead_qualification_weight:  1.9
+      social_proof_weight:        1.9
+      credential_display_weight:  1.9
+      portfolio_display_weight:   0.4
+      navigation_depth_weight:    0.8
+      mobile_optimization_weight: 0.8
+      competitive_diff_weight:    1.6
+      trust_signal_weight:        1.8
+
+  portfolio:
+    label: "作品集・実績提示型"
+    profile:
+      price_disclosure_weight:    0.2
+      cta_immediacy_weight:       0.6
+      lead_qualification_weight:  0.5
+      social_proof_weight:        1.1
+      credential_display_weight:  0.7
+      portfolio_display_weight:   2.0
+      navigation_depth_weight:    0.7
+      mobile_optimization_weight: 1.3
+      competitive_diff_weight:    1.3
+      trust_signal_weight:        0.7
+
+  brand:
+    label: "コーポレートブランド型"
+    profile:
+      price_disclosure_weight:    0.1
+      cta_immediacy_weight:       0.5
+      lead_qualification_weight:  0.3
+      social_proof_weight:        1.4
+      credential_display_weight:  0.9
+      portfolio_display_weight:   0.3
+      navigation_depth_weight:    1.3
+      mobile_optimization_weight: 1.4
+      competitive_diff_weight:    1.4
+      trust_signal_weight:        1.2

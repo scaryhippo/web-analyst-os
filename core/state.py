@@ -51,10 +51,12 @@ class AnalystState(TypedDict):
     competitor_title: str       # 競合サイトのページタイトル
     competitor_scores: Dict     # 競合サイトの推定スコア（competitive_analyst が出力）
 
-    # Phase 0.5: サイトタイプ自動分類
+    # Phase 0.5: 評価次元プロファイル（v3.0 新設計）
+    site_type_label: str        # 自由形式の人間向けラベル（採点には不使用）
     site_type_confidence: str   # "high" | "medium" | "low" | "explicit"
-    site_type_signals: List     # 自動判定の根拠シグナル（明示指定時は空リスト）
-    site_type_reasoning: str    # 自動判定の理由（明示指定時は空文字）
+    site_type_signals: List     # 後方互換用（v3.0 では evaluation_profile が主）
+    site_type_reasoning: str    # 判定理由
+    evaluation_profile: Dict    # 10次元の評価ウェイト辞書（採点・優先度判定に使用）
 
     # --context オプション
     context: str                # 依頼者提供の分析コンテキスト（空の場合は ""）
@@ -63,6 +65,6 @@ class AnalystState(TypedDict):
     current_phase: str
     error: Optional[str]
     run_red_team: bool                # False の場合は Phase 2 をスキップ
-    site_type: str                    # transactional / brand / portfolio / consulting
+    site_type: str                    # 後方互換用（v3.0 からは site_type_label を使用）
     crawl_subpages: bool
     crawl_max: int

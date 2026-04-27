@@ -21,6 +21,33 @@ def clean_executive_summary(text: str) -> str:
     return "\n".join(lines).strip()
 
 
+def calculate_weighted_total(scores: dict, profile: dict) -> int:
+    """
+    評価次元プロファイルに基づく重み付き総合スコアを計算する。
+    プロファイルが空の場合は単純平均にフォールバック。
+    """
+    if not scores:
+        return 0
+    if not profile:
+        return round(sum(scores.values()) / len(scores))
+
+    def avg(*keys):
+        vals = [profile.get(k, 1.0) for k in keys]
+        return sum(vals) / len(vals)
+
+    agent_weights = {
+        "conversion": avg("cta_immediacy_weight", "price_disclosure_weight", "lead_qualification_weight"),
+        "ux":         avg("navigation_depth_weight", "mobile_optimization_weight"),
+        "brand_copy": avg("social_proof_weight", "credential_display_weight", "portfolio_display_weight"),
+        "technical":  1.0,  # 技術スコアは常に等重み
+        "competitive": avg("competitive_diff_weight", "social_proof_weight"),
+    }
+
+    weighted_sum = sum(scores.get(agent, 0) * weight for agent, weight in agent_weights.items())
+    weight_total = sum(agent_weights.values())
+    return round(weighted_sum / weight_total) if weight_total > 0 else 0
+
+
 def extract_competitive_summary(text: str) -> str:
     """competitive_analyst の出力から <competitive_summary> タグの内容を抽出する"""
     match = re.search(r'<competitive_summary>(.*?)</competitive_summary>', text, re.DOTALL)
@@ -281,8 +308,10 @@ def generate_report(state: dict) -> str:
     competitor_url = state.get("competitor_url")
     competitor_data = state.get("competitor_data")
     metrics = state.get("page_load_metrics", {})
-    site_type = state.get("site_type", "transactional")
+    # v3.0: site_type_label が優先、なければ site_type を後方互換で使用
+    site_type_label_raw = state.get("site_type_label", "") or state.get("site_type", "")
     site_type_confidence = state.get("site_type_confidence", "")
+    evaluation_profile = state.get("evaluation_profile", {})
     subpages = state.get("subpages", [])
 
     score_labels = [
@@ -293,13 +322,8 @@ def generate_report(state: dict) -> str:
         ("competitive", "競合ポジショニング"),
     ]
 
-    site_type_labels = {
-        "transactional": "流入型BtoB/BtoC",
-        "consulting":    "高単価・選別型コンサルティング",
-        "brand":         "ブランディング・認知目的",
-        "portfolio":     "作品集・実績提示",
-    }
-    _label = site_type_labels.get(site_type, site_type)
+    # v3.0: 自由形式ラベルを使用
+    _label = site_type_label_raw or "不明"
     if site_type_confidence == "explicit":
         site_type_line = f"サイトタイプ: {_label}（明示指定）"
     elif site_type_confidence == "high":
@@ -307,7 +331,7 @@ def generate_report(state: dict) -> str:
     elif site_type_confidence == "medium":
         site_type_line = f"サイトタイプ: {_label}（自動判定・確信度：中 — 異なる場合は --site-type で上書き可能）"
     else:
-        site_type_line = f"サイトタイプ: {_label}（自動判定・確信度：低 — --site-type で上書きを推奨）"
+        site_type_line = f"サイトタイプ: {_label}（自動判定・確信度：低 — --site-type での上書きを強く推奨）"
 
     lines = [
         "# Web Analyst OS — 分析レポート",

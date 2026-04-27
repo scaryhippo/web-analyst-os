@@ -47,13 +47,24 @@ def build_initial_state(
     context: str = "",
     explicit_site_type: bool = False,
 ) -> dict:
+    # v3.0: --site-type 指定時はプリセットから evaluation_profile をロード
+    evaluation_profile = {}
+    site_type_label = ""
+    if explicit_site_type and site_type:
+        cfg = load_config()
+        presets = cfg.get("site_type_presets", {})
+        preset = presets.get(site_type, {})
+        evaluation_profile = preset.get("profile", {})
+        site_type_label = preset.get("label", site_type)
+
     return {
         "target_url": url,
         "competitor_url": competitor_url or None,
         "focus": focus,
         "task_id": task_id,
         "run_red_team": run_red_team,
-        "site_type": site_type,
+        "site_type": site_type,          # 後方互換
+        "site_type_label": site_type_label,
         "crawl_subpages": crawl_subpages,
         "crawl_max": crawl_max,
         "context": context,
@@ -62,7 +73,9 @@ def build_initial_state(
         "competitive_analysis": "",
         "competitor_title": "",
         "competitor_scores": {},
-        # Phase 0.5: サイトタイプ自動分類
+        # Phase 0.5: 評価次元プロファイル（v3.0）
+        "evaluation_profile": evaluation_profile,
+        "site_type_label": site_type_label,
         "site_type_confidence": "explicit" if explicit_site_type else "",
         "site_type_signals": [],
         "site_type_reasoning": "",

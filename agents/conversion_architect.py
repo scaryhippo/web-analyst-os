@@ -2,6 +2,7 @@
 Conversion Architect — コンバージョン設計の専門エージェント
 """
 from core.llm_router import call_llm
+from core.agent_utils import build_profile_instruction
 from agents._base import build_context_prefix, build_structured_data_context, parse_agent_json, safe_score, build_page_context, get_site_type_context
 
 SYSTEM_PROMPT = """あなたは「Conversion Architect」です。コンバージョン設計の専門家として、
@@ -56,8 +57,9 @@ def conversion_architect_node(state: dict) -> dict:
 
 JSON のみで回答してください。"""
 
+    _profile_instr = build_profile_instruction(state.get("evaluation_profile", {}), "conversion")
     _sd_ctx = build_structured_data_context(state)
-    system = SYSTEM_PROMPT + "\n\n" + get_site_type_context(state) + (("\n\n" + _sd_ctx) if _sd_ctx else "")
+    system = SYSTEM_PROMPT + "\n\n" + get_site_type_context(state) + (("\n\n" + _sd_ctx) if _sd_ctx else "") + (("\n\n" + _profile_instr) if _profile_instr else "")
     raw = call_llm("specialist", system, user_prompt, max_tokens=2500)
     data = parse_agent_json(raw)
     score = safe_score(data)

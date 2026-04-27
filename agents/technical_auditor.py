@@ -3,6 +3,7 @@ Technical & Performance Auditor — 技術的障壁の専門エージェント
 HTML・メトリクスから判定（Lighthouse 不要）
 """
 from core.llm_router import call_llm
+from core.agent_utils import build_profile_instruction
 from agents._base import build_context_prefix, build_structured_data_context, parse_agent_json, safe_score, get_site_type_context
 
 SYSTEM_PROMPT = """あなたは「Technical & Performance Auditor」です。技術的障壁の専門家として、
@@ -118,8 +119,9 @@ meta description: {meta}
 
 JSON のみで回答してください。"""
 
+    _profile_instr = build_profile_instruction(state.get("evaluation_profile", {}), "technical")
     _sd_ctx = build_structured_data_context(state)
-    system = SYSTEM_PROMPT + "\n\n" + get_site_type_context(state) + (("\n\n" + _sd_ctx) if _sd_ctx else "")
+    system = SYSTEM_PROMPT + "\n\n" + get_site_type_context(state) + (("\n\n" + _sd_ctx) if _sd_ctx else "") + (("\n\n" + _profile_instr) if _profile_instr else "")
     raw = call_llm("technical", system, user_prompt, max_tokens=2500)
     data = parse_agent_json(raw)
     score = safe_score(data)
