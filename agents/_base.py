@@ -65,6 +65,37 @@ def get_site_type_context(state: dict) -> str:
     return SITE_TYPE_CONTEXT.get(site_type, SITE_TYPE_CONTEXT["transactional"])
 
 
+def build_structured_data_context(state: dict) -> str:
+    """JSON-LD 構造化データをエージェントに渡すコンテキスト文字列を組み立てる"""
+    sd = state.get("structured_data", {})
+    if not sd:
+        return ""
+    lines = ["\n=== JSON-LD 構造化データ（一次情報・優先使用） ==="]
+    if sd.get("business_name"):
+        lines.append(f"事業者名: {sd['business_name']}")
+    if sd.get("telephone"):
+        lines.append(f"電話: {sd['telephone']}")
+    if sd.get("founding_date"):
+        lines.append(f"設立: {sd['founding_date']}")
+    if sd.get("price_range"):
+        lines.append(f"価格帯: {sd['price_range']}")
+    if sd.get("opening_hours"):
+        lines.append(f"営業時間: {sd['opening_hours']}")
+    if sd.get("aggregate_rating"):
+        r = sd["aggregate_rating"]
+        lines.append(f"評価: {r.get('value')}★ ({r.get('count')}件, 最高{r.get('best')})")
+    if sd.get("offers"):
+        lines.append(f"料金情報: {str(sd['offers'])[:500]}")
+    lines.append(
+        "\n【構造化データの優先利用】"
+        "上記の営業時間・料金・評価・住所はこのデータを一次情報として使用すること。"
+        "opening_hoursに例外規定があれば「矛盾」と指摘してはならない。"
+        "price_rangeやoffersにデータがあれば「料金が掲載されていない」と断言してはならない。"
+        "aggregate_ratingがあれば「社会的証明がない」ではなく「Webページ上に口コミ表示がない」と表現すること。"
+    )
+    return "\n".join(lines)
+
+
 def build_subpages_context(state: dict) -> str:
     """サブページデータをエージェントに渡すコンテキスト文字列を組み立てる"""
     subpages = state.get("subpages", [])

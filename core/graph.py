@@ -67,6 +67,7 @@ def browser_collection_node(state: AnalystState) -> dict:
         "screenshot_path": data["screenshot_path"],
         "mobile_screenshot_path": data["mobile_screenshot_path"],
         "page_load_metrics": data["page_load_metrics"],
+        "structured_data": data.get("structured_data", {}),
         "subpages": data.get("subpages", []),
         "competitor_data": competitor_data,
         "current_phase": "phase0_complete",

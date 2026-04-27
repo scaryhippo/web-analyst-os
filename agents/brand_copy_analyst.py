@@ -2,7 +2,7 @@
 Brand & Copy Analyst — バリュープロポジションの専門エージェント
 """
 from core.llm_router import call_llm
-from agents._base import parse_agent_json, safe_score, build_page_context, get_site_type_context
+from agents._base import build_structured_data_context, parse_agent_json, safe_score, build_page_context, get_site_type_context
 
 SYSTEM_PROMPT = """あなたは「Brand & Copy Analyst」です。バリュープロポジションの専門家として、
 明確で差別化されたメッセージが伝わるかを判定します。
@@ -41,7 +41,8 @@ def brand_copy_analyst_node(state: dict) -> dict:
 
 JSON のみで回答してください。"""
 
-    system = SYSTEM_PROMPT + "\n\n" + get_site_type_context(state)
+    _sd_ctx = build_structured_data_context(state)
+    system = SYSTEM_PROMPT + "\n\n" + get_site_type_context(state) + (("\n\n" + _sd_ctx) if _sd_ctx else "")
     raw = call_llm("specialist", system, user_prompt, max_tokens=2500)
     data = parse_agent_json(raw)
     score = safe_score(data)

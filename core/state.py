@@ -43,6 +43,9 @@ class AnalystState(TypedDict):
     # サブページクローリング（--crawl-subpages 時のみ）
     subpages: List[Dict]
 
+    # JSON-LD 構造化データ（営業時間・料金・評価等）
+    structured_data: Dict
+
     # メタ
     current_phase: str
     error: Optional[str]

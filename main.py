@@ -55,6 +55,7 @@ def build_initial_state(
         "crawl_subpages": crawl_subpages,
         "crawl_max": crawl_max,
         "subpages": [],
+        "structured_data": {},
         # Phase 0（初期化）
         "page_title": "",
         "page_meta_description": "",

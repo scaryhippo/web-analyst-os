@@ -38,6 +38,83 @@ class BrowserCollector:
         self.screenshot_dir = Path(config["output"]["screenshot_dir"]).expanduser()
         self.screenshot_dir.mkdir(parents=True, exist_ok=True)
 
+    async def extract_main_content(self, page) -> str:
+        """
+        Google翻訳ウィジェット・nav/header/footer等のノイズを除去した上で
+        本文テキストを取得する。DOM操作はクローン上で行い元ページに影響しない。
+        """
+        text = await page.evaluate("""
+            () => {
+                const NOISE_SELECTORS = [
+                    '#google_translate_element', '.goog-te-combo',
+                    '.goog-te-banner-frame', '.skiptranslate', '.goog-te-gadget',
+                    'select', '[class*="language"]', '[id*="language"]',
+                    '[class*="translate"]', '[id*="translate"]',
+                    'nav', 'header', 'footer',
+                    'script', 'style', 'noscript', 'iframe',
+                    '#wpadminbar', '.wp-admin-bar',
+                ];
+                const clone = document.body.cloneNode(true);
+                NOISE_SELECTORS.forEach(sel => {
+                    clone.querySelectorAll(sel).forEach(el => el.remove());
+                });
+                const mainSelectors = [
+                    'main', 'article', '#content', '.content',
+                    '#main', '.main', '[role="main"]'
+                ];
+                for (const sel of mainSelectors) {
+                    const el = clone.querySelector(sel);
+                    if (el && el.innerText.trim().length > 200) {
+                        return el.innerText.trim();
+                    }
+                }
+                return clone.innerText.trim();
+            }
+        """)
+        return text or ""
+
+    async def extract_structured_data(self, page) -> dict:
+        """
+        JSON-LD構造化データを取得し、営業時間・料金・評価などを抽出する。
+        Schema.org準拠のサイトでは本文テキストより信頼性の高い情報源となる。
+        """
+        raw_jsonld = await page.evaluate("""
+            () => {
+                const scripts = document.querySelectorAll('script[type="application/ld+json"]');
+                return Array.from(scripts).map(s => {
+                    try { return JSON.parse(s.textContent); }
+                    catch(e) { return null; }
+                }).filter(Boolean);
+            }
+        """)
+        extracted: dict = {}
+        for item in raw_jsonld:
+            if not isinstance(item, dict):
+                continue
+            if item.get("@type") in [
+                "LocalBusiness", "Store", "Restaurant", "PhotoStudio",
+                "Organization", "ProfessionalService",
+            ]:
+                extracted["business_name"] = item.get("name", "")
+                extracted["address"] = item.get("address", {})
+                extracted["telephone"] = item.get("telephone", "")
+                extracted["price_range"] = item.get("priceRange", "")
+                extracted["founding_date"] = item.get("foundingDate", "")
+                hours = item.get("openingHours", item.get("openingHoursSpecification", []))
+                if hours:
+                    extracted["opening_hours"] = hours
+                rating = item.get("aggregateRating", {})
+                if rating:
+                    extracted["aggregate_rating"] = {
+                        "value": rating.get("ratingValue", ""),
+                        "count": rating.get("reviewCount", rating.get("ratingCount", "")),
+                        "best": rating.get("bestRating", 5),
+                    }
+            offers = item.get("offers", item.get("hasOfferCatalog", {}))
+            if offers:
+                extracted["offers"] = offers
+        return extracted
+
     async def _crawl_subpages(self, browser, page, base_url: str, max_pages: int = 3) -> list:
         """
         ナビゲーションリンクを抽出し、最大 max_pages 件のサブページを収集する。
@@ -121,7 +198,7 @@ class BrowserCollector:
                 sub_page = await browser.new_page()
                 await sub_page.goto(link["href"], wait_until="domcontentloaded", timeout=15000)
                 await sub_page.wait_for_timeout(1500)
-                sub_text = await sub_page.inner_text("body")
+                sub_text = await self.extract_main_content(sub_page)
                 sub_html = await sub_page.content()
                 # コンテンツが極端に少ないページ（200文字未満）は除外
                 if len(sub_text.strip()) < 200:
@@ -130,7 +207,7 @@ class BrowserCollector:
                 subpage_data.append({
                     "url": link["href"],
                     "nav_label": link["text"],
-                    "text_content": sub_text[:3000],
+                    "text_content": sub_text[:8000],  # Fix C: 3000→8000
                     "page_size_bytes": len(sub_html.encode("utf-8")),
                 })
                 await sub_page.close()
@@ -183,9 +260,12 @@ class BrowserCollector:
             if meta_el:
                 meta_desc = await meta_el.get_attribute("content") or ""
 
-            # テキスト・HTML 取得
-            page_text = await page.inner_text("body")
+            # テキスト・HTML 取得（ノイズ除去済みコンテンツ）
+            page_text = await self.extract_main_content(page)
             page_html = await page.content()
+
+            # JSON-LD 構造化データ取得
+            structured_data = await self.extract_structured_data(page)
 
             # Core Web Vitals 相当の簡易計測
             metrics = await page.evaluate("""() => {
@@ -246,11 +326,12 @@ class BrowserCollector:
         return {
             "page_title": title,
             "page_meta_description": meta_desc,
-            "page_text": page_text[:8000],      # トークン節約のため上限設定
+            "page_text": page_text[:10000],
             "page_html": page_html[:12000],
             "screenshot_path": str(screenshot_path),
             "mobile_screenshot_path": str(mobile_screenshot_path),
             "page_load_metrics": metrics,
+            "structured_data": structured_data,
             "subpages": subpages,
         }
 
